@@ -3489,8 +3489,16 @@ def generate_plan(
             return candidate, model_name
 
         except Exception as exc:
-            last_error = exc
-            status = getattr(exc, "code", None)
+    last_error = exc
+    status = getattr(exc, "code", None)
+
+    print(
+        f"GEMINI_ERROR model={model_name} "
+        f"attempt={attempt + 1} "
+        f"status={status} "
+        f"type={type(exc).__name__}",
+        flush=True
+    )
 
             print(
                 f"Gemini model {model_name} failed: "
