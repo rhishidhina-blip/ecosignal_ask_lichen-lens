@@ -3411,6 +3411,18 @@ Rules:
 8. Treat internal guidance as workflow advice, never independent validation. Preserve geographic and study boundaries. Do not apply species-specific or UK thresholds to Raleigh without validation.
 7. Select exactly one permitted recommended action. If no action is needed, select none.
 '''.strip()
+CITATION_REQUIREMENTS = """
+CITATION FORMATTING REQUIREMENTS:
+1. Every source listed in cited_source_ids MUST appear in the
+   answer or uncertainty text as [SOURCE-ID].
+2. Only cite source IDs provided in the retrieved evidence.
+3. Place citations immediately after the claims they support.
+4. Do not invent additional sources.
+5. If a claim is not supported, qualify it or omit it.
+"""
+SYSTEM_POLICY += "\n" + CITATION_REQUIREMENTS
+
+SYSTEM_POLICY += "\n" + CITATION_REQUIREMENTS
 
 def make_gemini_client(api_key: Optional[str]):
     if not api_key:
