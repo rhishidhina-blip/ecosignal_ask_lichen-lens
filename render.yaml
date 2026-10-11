@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: ecosignal-ask-lichenlens
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:api --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ECOSIGNAL_CHAT_MODEL
+        value: gemini-3.8-flash
+      - key: ECOSIGNAL_CHAT_FALLBACK_MODELS
+        value: gemini-3.5-flash,gemini-3.1-flash-lite
+      - key: ECOSIGNAL_ALLOWED_ORIGINS
+        sync: false
+      - key: ECOSIGNAL_ENABLE_EMBEDDINGS
+        value: "0"
+      - key: ECOSIGNAL_ENABLE_PUBLIC_AUDIT
+        value: "0"

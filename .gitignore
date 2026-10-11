@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.env
+.env.*
+!*.example
+EcoSignal_runtime/
+*.db
+*.sqlite
+*.sqlite3
+.ipynb_checkpoints/
