@@ -3489,23 +3489,17 @@ def generate_plan(
             return candidate, model_name
 
         except Exception as exc:
-    last_error = exc
-    status = getattr(exc, "code", None)
-
-    print(
-        f"GEMINI_ERROR model={model_name} "
-        f"attempt={attempt + 1} "
-        f"status={status} "
-        f"type={type(exc).__name__}",
-        flush=True
-    )
+            last_error = exc
+            status = getattr(exc, "code", None)
 
             print(
-                f"Gemini model {model_name} failed: "
-                f"{type(exc).__name__}, status={status}"
+                f"GEMINI_ERROR model={model_name} "
+                f"status={status} "
+                f"type={type(exc).__name__}",
+                flush=True
             )
 
-            # Only switch models for temporary service errors.
+            # Only switch models for temporary service errors
             if status not in (429, 500, 502, 503, 504):
                 raise
 
