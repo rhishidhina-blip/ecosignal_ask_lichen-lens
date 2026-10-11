@@ -3417,8 +3417,15 @@ def make_gemini_client(api_key: Optional[str]):
         return None
 
     from google import genai
+    from google.genai import types
 
-    return genai.Client(api_key=api_key, vertexai=False)
+    return genai.Client(
+        api_key=api_key,
+        vertexai=False,
+        http_options=types.HttpOptions(
+            timeout=15000  # 15 seconds, milliseconds
+        )
+    )
 
 
 def generate_plan(
@@ -3454,35 +3461,49 @@ def generate_plan(
     }
 
     preferred = settings.chat_model
-    configured = os.getenv('ECOSIGNAL_CHAT_FALLBACK_MODELS', 'gemini-3.5-flash,gemini-3.1-flash-lite')
-    model_names = list(dict.fromkeys([preferred] + [v.strip() for v in configured.split(',') if v.strip()]))
+    fallback = "gemini-3.1-flash-lite"
+
+    model_names = list(dict.fromkeys([preferred, fallback]))
     last_error = None
+
     for model_name in model_names:
-        for attempt in range(2):
-            try:
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=canonical_json(payload),
-                    config={
-                        'system_instruction': SYSTEM_POLICY,
-                        'response_mime_type': 'application/json',
-                        'response_json_schema': LLMTextPlan.model_json_schema(),
-                        'temperature': 0.2,
-                    },
-                )
-                if not response.text:
-                    raise RuntimeError('Gemini returned no structured text.')
-                candidate = LLMTextPlan.model_validate_json(response.text)
-                return candidate, model_name
-            except Exception as exc:
-                last_error = exc
-                status = getattr(exc, 'code', None)
-                if status not in (429, 500, 502, 503, 504):
-                    # A schema or authentication problem should not trigger repeated requests.
-                    raise
-                if attempt == 0:
-                    time.sleep(1.5 * (attempt + 1))
-    raise RuntimeError(f'All Gemini generation models unavailable: {type(last_error).__name__}') from last_error
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=canonical_json(payload),
+                config={
+                    "system_instruction": SYSTEM_POLICY,
+                    "response_mime_type": "application/json",
+                    "response_json_schema": LLMTextPlan.model_json_schema(),
+                    "temperature": 0.2,
+                },
+            )
+
+            if not response.text:
+                raise RuntimeError("Gemini returned no structured text.")
+
+            candidate = LLMTextPlan.model_validate_json(
+                response.text
+            )
+
+            return candidate, model_name
+
+        except Exception as exc:
+            last_error = exc
+            status = getattr(exc, "code", None)
+
+            print(
+                f"Gemini model {model_name} failed: "
+                f"{type(exc).__name__}, status={status}"
+            )
+
+            # Only switch models for temporary service errors.
+            if status not in (429, 500, 502, 503, 504):
+                raise
+
+    raise RuntimeError(
+        "Both Gemini generation models are unavailable."
+    ) from last_error
 
 
 def init_audit_db(path: Path) -> None:
