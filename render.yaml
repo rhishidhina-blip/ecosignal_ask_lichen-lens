@@ -1,8 +1,8 @@
 services:
   - type: web
-    name: ecosignal-ask-lichenlens
+    name: ecosignal-ask-lichen-lens
     runtime: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: python -m pip install --only-binary=:all: -r requirements.txt
     startCommand: uvicorn main:api --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
@@ -10,11 +10,11 @@ services:
       - key: GEMINI_API_KEY
         sync: false
       - key: ECOSIGNAL_CHAT_MODEL
-        value: gemini-3.8-flash
+        value: gemini-3.1-flash-lite
       - key: ECOSIGNAL_CHAT_FALLBACK_MODELS
-        value: gemini-3.5-flash,gemini-3.1-flash-lite
+        value: gemini-3.8-flash
       - key: ECOSIGNAL_ALLOWED_ORIGINS
-        sync: false
+        value: https://ecosignal-app.dhina-srini.chatgpt.site
       - key: ECOSIGNAL_ENABLE_EMBEDDINGS
         value: "0"
       - key: ECOSIGNAL_ENABLE_PUBLIC_AUDIT

@@ -24,3 +24,7 @@
 - The built-in rate limiter is per-process, not an abuse-proof service-wide rate limiter. CORS is not authentication. Do not expose unrestricted private scan records or spend unlimited Gemini quota publicly.
 - If Gemini is temporarily overloaded, the service retries once and then tries configured fallback models; if all fail, it returns a deterministic answer based on its knowledge bank. It does not guarantee successful AI responses or overcome API quota restrictions.
 - Live hosting, DNS, billing, Google Drive DB imports, and Gemini calls have not been verified in this environment.
+
+
+## GitHub upload (current deployment)
+See `UPLOAD_INSTRUCTIONS.md`. Python is pinned to 3.11.11 in `.python-version`; do not use the default Python 3.14 runtime.

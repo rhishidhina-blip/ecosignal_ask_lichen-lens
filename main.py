@@ -3392,8 +3392,14 @@ def deterministic_plan(intent: Intent, evidence: list[EvidenceItem], retrieved: 
     }.get(intent, 'none')
     uncertainty = ('Interpret the result with the listed app confidence and limitations. Similar-looking lichen patterns can arise '
                    'under multiple biological and environmental conditions, so the assistant does not infer causation from an image.')
-    if context_flags:
-        uncertainty += ' Missing context: ' + ', '.join(context_flags) + '.'
+    # Only user-relevant context limitations belong in the response text.
+    # Technical failure details stay in server logs and safety_flags.
+    public_context = [flag for flag in context_flags if flag in {
+        'NO_MISSION_SELECTED', 'NO_SAMPLE_SELECTED',
+        'SAMPLE_NOT_FOUND', 'MISSION_NOT_FOUND',
+    }]
+    if public_context and intent in {'scan_explanation', 'coverage', 'reliability', 'repeat_scan', 'field_mission'}:
+        uncertainty += ' No relevant observation or mission data was attached.'
     return LLMTextPlan(answer=answer[:1800], uncertainty=uncertainty[:700], recommended_action=action, cited_source_ids=source_ids)
 
 
@@ -3411,18 +3417,13 @@ Rules:
 8. Treat internal guidance as workflow advice, never independent validation. Preserve geographic and study boundaries. Do not apply species-specific or UK thresholds to Raleigh without validation.
 7. Select exactly one permitted recommended action. If no action is needed, select none.
 '''.strip()
-CITATION_REQUIREMENTS = """
-CITATION FORMATTING REQUIREMENTS:
-1. Every source listed in cited_source_ids MUST appear in the
-   answer or uncertainty text as [SOURCE-ID].
-2. Only cite source IDs provided in the retrieved evidence.
-3. Place citations immediately after the claims they support.
-4. Do not invent additional sources.
-5. If a claim is not supported, qualify it or omit it.
-"""
-SYSTEM_POLICY += "\n" + CITATION_REQUIREMENTS
 
-SYSTEM_POLICY += "\n" + CITATION_REQUIREMENTS
+SYSTEM_POLICY += """
+CITATION FORMAT REQUIREMENTS:
+- Every source listed in cited_source_ids MUST appear in the answer or uncertainty as [SOURCE-ID].
+- Cite only retrieved source IDs and put each citation next to the claim it supports.
+- Do not include uncited scientific claims or fabricated measurement values.
+"""
 
 def make_gemini_client(api_key: Optional[str]):
     if not api_key:
@@ -3431,12 +3432,11 @@ def make_gemini_client(api_key: Optional[str]):
     from google import genai
     from google.genai import types
 
+    # The SDK timeout is expressed in milliseconds (15,000 = 15 seconds).
     return genai.Client(
         api_key=api_key,
         vertexai=False,
-        http_options=types.HttpOptions(
-            timeout=15000  # 15 seconds, milliseconds
-        )
+        http_options=types.HttpOptions(timeout=15000),
     )
 
 
@@ -3472,52 +3472,50 @@ def generate_plan(
         ],
     }
 
+    # Exactly two model attempts; do not retry one overloaded model several times.
     preferred = settings.chat_model
-    fallback = "gemini-3.1-flash-lite"
-
-    model_names = list(dict.fromkeys([preferred, fallback]))
+    configured = os.getenv('ECOSIGNAL_CHAT_FALLBACK_MODELS', 'gemini-3.8-flash')
+    alternatives = [v.strip() for v in configured.split(',') if v.strip()]
+    model_names = list(dict.fromkeys([preferred] + alternatives))[:2]
     last_error = None
-
     for model_name in model_names:
+        started = time.monotonic()
         try:
             response = client.models.generate_content(
                 model=model_name,
                 contents=canonical_json(payload),
                 config={
-                    "system_instruction": SYSTEM_POLICY,
-                    "response_mime_type": "application/json",
-                    "response_json_schema": LLMTextPlan.model_json_schema(),
-                    "temperature": 0.2,
+                    'system_instruction': SYSTEM_POLICY,
+                    'response_mime_type': 'application/json',
+                    'response_json_schema': LLMTextPlan.model_json_schema(),
+                    'temperature': 0.2,
                 },
             )
-
             if not response.text:
-                raise RuntimeError("Gemini returned no structured text.")
-
-            candidate = LLMTextPlan.model_validate_json(
-                response.text
-            )
-
+                raise RuntimeError('Gemini returned no structured text.')
+            candidate = LLMTextPlan.model_validate_json(response.text)
+            print(f'GEMINI_OK model={model_name} duration_s={time.monotonic()-started:.2f}', flush=True)
             return candidate, model_name
-
         except Exception as exc:
             last_error = exc
-            status = getattr(exc, "code", None)
-
+            status = getattr(exc, 'code', None)
             print(
-                f"GEMINI_ERROR model={model_name} "
-                f"status={status} "
-                f"type={type(exc).__name__}",
-                flush=True
+                f'GEMINI_ERROR model={model_name} status={status} '
+                f'type={type(exc).__name__} duration_s={time.monotonic()-started:.2f}',
+                flush=True,
             )
-
-            # Only switch models for temporary service errors
-            if status not in (429, 500, 502, 503, 504):
-                raise
-
-    raise RuntimeError(
-        "Both Gemini generation models are unavailable."
-    ) from last_error
+            # Bad credentials, malformed requests or schema errors require repair,
+            # not a call to another model with the same invalid configuration.
+            if status not in (429, 500, 502, 503, 504) and not isinstance(exc, TimeoutError):
+                # SDK may surface request timeouts as httpx exceptions.
+                try:
+                    import httpx
+                    retryable_timeout = isinstance(exc, (httpx.TimeoutException, httpx.TransportError))
+                except ImportError:
+                    retryable_timeout = False
+                if not retryable_timeout:
+                    break
+    raise RuntimeError('Gemini generation failed; deterministic fallback will be used.') from last_error
 
 
 def init_audit_db(path: Path) -> None:
@@ -3628,12 +3626,14 @@ class AskLichenLens:
                 validation_flags = validate_plan(candidate, retrieved, evidence)
                 if validation_flags:
                     flags.extend(validation_flags)
-                    plan = deterministic_plan(intent, evidence, retrieved, flags)
+                    print(f'GROUNDING_REJECTED flags={validation_flags}', flush=True)
+                    plan = deterministic_plan(intent, evidence, retrieved, context_flags)
                 else:
                     plan, mode, model = candidate, 'grounded_llm', chosen_model
             except Exception as exc:
-                flags.append(f'LLM_FALLBACK:{type(exc).__name__}')
-                plan = deterministic_plan(intent, evidence, retrieved, flags)
+                print(f'CHAT_GENERATION_FALLBACK type={type(exc).__name__}', flush=True)
+                flags.append('LLM_GENERATION_UNAVAILABLE')
+                plan = deterministic_plan(intent, evidence, retrieved, context_flags)
 
         by_id = {r['source_id']: r for r in retrieved}
         sources = [Citation(**{k: by_id[sid].get(k) for k in ('source_id', 'title', 'url', 'supports', 'evidence_type', 'geographic_scope')})
@@ -3707,7 +3707,14 @@ def suggested_questions(sample_id: Optional[str] = None):
 @api.post('/assistant/ask', response_model=AssistantReply)
 def ask_endpoint(request: AskRequest, http_request: Request):
     enforce_rate_limit(http_request.client.host if http_request.client else "unknown")
-    return assistant.ask(request)
+    started = time.monotonic()
+    reply = assistant.ask(request)
+    print(
+        f'CHAT_RESULT request_id={reply.request_id} mode={reply.mode} '
+        f'model={reply.model or "none"} duration_s={time.monotonic()-started:.2f}',
+        flush=True,
+    )
+    return reply
 
 @api.get('/assistant/audit/verify')
 def audit_verify():
