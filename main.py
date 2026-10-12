@@ -3222,13 +3222,42 @@ INJECTION_PATTERNS = [
     r'(show|reveal|print|repeat).{0,30}(system prompt|developer message|api key|secret)',
     r'jailbreak', r'pretend you have no rules', r'bypass.{0,20}(guardrail|policy|safety)',
 ]
-FORBIDDEN_CLAIM_PATTERNS = [
-    r'\b(proves?|confirmed?) (that )?(pollution|a pollutant)',
-    r'\b(caused|causes) by (pollution|ozone|nitrogen|sulfur|pm2\.5)',
-    r'\bthis lichen (has|shows|is suffering from) chlorosis\b',
-    r'\bregulatory[- ]grade\b',
-    r'\bthe air is (safe|unsafe) to breathe\b',
+# Reject only affirmative claims that an EcoSignal image proves pollution,
+# identifies a specific injury, or establishes breathing safety. A discussion
+# that explicitly denies those claims is legitimate scientific education.
+# This is a targeted heuristic, not a guarantee against hallucinations.
+UNSUPPORTED_ASSERTION_PATTERNS = [
+    r"\b(?:this|the|a|an)?\s*(?:lichen|scan|photo|image|coverage|growth form|result)\s+(?:proves?|confirms?|demonstrates?|guarantees?)\s+(?:that\s+)?(?:the\s+)?(?:air\s+is\s+)?(?:polluted|pollution|safe|unsafe|a\s+pollutant|high\s+pollution)\b",
+    r"\b(?:this|the)\s+lichen\s+(?:has|shows|is suffering from)\s+chlorosis\b",
+    r"\b(?:the|this|local)\s+air\s+is\s+(?:safe|unsafe)\s+to\s+breathe\b",
+    r"\b(?:this|the)\s+(?:scan|image|photo|lichen|coverage|result)\s+(?:is|provides|constitutes)\s+(?:a\s+)?regulatory[- ]grade\s+(?:measurement|monitor|evidence|assessment|reading)\b",
 ]
+# Negation and uncertainty phrases immediately preceding a matched assertion
+# convert it from a forbidden claim into a permitted discussion of limitations.
+_ASSERTION_NEGATION = re.compile(
+    r"\b(?:cannot|can't|can not|does not|do not|did not|is not|isn't|are not|aren't|never|not|no|"
+    r"should not|must not|would not|cannot conclude|not possible to|not enough to|"
+    r"wrong to say|incorrect to say|false to say|unsupported to say|"
+    r"doesn't|don't|without|rather than)\b", re.I)
+
+
+def has_blantantly_unsupported_claim(text: str) -> bool:
+    """Flag explicit unsupported assertions, not discussion of their limits.
+
+    Conservative on rejection: ambiguous claims should not automatically force
+    a deterministic fallback. Scientific citation/source validation is separate.
+    """
+    # Check sentence-local text so negation in another sentence is irrelevant.
+    for sentence in re.split(r"[.!?;\n]+", text):
+        for pattern in UNSUPPORTED_ASSERTION_PATTERNS:
+            for match in re.finditer(pattern, sentence, flags=re.I):
+                preceding = sentence[max(0, match.start()-95):match.start()]
+                # Also catch negation inside the matched subject/predicate span.
+                assertion = match.group(0)
+                if _ASSERTION_NEGATION.search(preceding) or _ASSERTION_NEGATION.search(assertion):
+                    continue
+                return True
+    return False
 
 def route_intent(question: str) -> Intent:
     q = question.lower().strip()
@@ -3383,7 +3412,7 @@ def validate_plan(plan: LLMTextPlan, retrieved: list[dict[str, Any]], evidence: 
     if retrieved and not (used or rendered):
         flags.append('MISSING_SOURCE_CITATION')
     combined = f'{plan.answer} {plan.uncertainty}'
-    if any(re.search(pattern, combined, flags=re.I) for pattern in FORBIDDEN_CLAIM_PATTERNS):
+    if has_blantantly_unsupported_claim(combined):
         flags.append('PROHIBITED_SCIENTIFIC_CLAIM')
     if len(plan.answer) > 1800 or len(plan.uncertainty) > 700:
         flags.append('RESPONSE_LENGTH_EXCEEDED')

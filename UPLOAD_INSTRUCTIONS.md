@@ -23,3 +23,5 @@ Keep `GEMINI_API_KEY` stored privately in Render.
 5. Watch Render logs for `GEMINI_OK`, `GEMINI_ERROR`, `GEMINI_BACKOFF` and `CHAT_RESULT`.
 
 Notes: Each failed 503/504 can now take up to 30 seconds per model plus backoff, so a two-model attempt may take around a minute. A frontend timeout shorter than this should be increased separately. The concurrency limit is per server process, not global across scaled instances. API rate limits and outages still require fallback.
+
+Context-aware scientific validation: rejects only clear unsupported affirmative claims; permits negations and limitation explanations.
