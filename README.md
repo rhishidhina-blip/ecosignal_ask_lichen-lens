@@ -1,9 +1,15 @@
-# EcoSignal Ask LichenLens — GitHub-ready reliability update
+# EcoSignal Ask LichenLens — Answer Quality Update
 
-This is a complete backend deployment, preserving the 191 built-in reviewed knowledge records, routing fixes, short retrieval context, cache for successful general educational replies, relaxed citation placement, source-ID verification, and deterministic fallback.
+This is the complete GitHub-ready backend based on the context-aware validator deployment.
 
-**New in this version:** 30-second configurable Gemini SDK timeout; default one concurrent Gemini call per worker; at most two generation attempts (primary + alternate); bounded exponential backoff with jitter after retryable failures. 429 quota failures do not trigger repetitive attempts of the same model.
+New improvements:
+- The Gemini system instructions require a direct answer before uncertainty and methodological caveats.
+- Bioindicator questions prioritize the reviewed NPS lichen-bioindication knowledge record in lexical retrieval, rather than leading with regulatory caveats.
+- The backend normalizes Markdown-wrapped citation IDs to clean `[SOURCE-ID]` markers and continues checking that citations correspond to retrieved knowledge.
+- Existing token limits, response caching, retries/backoff, concurrency control, scientific validation and observation-specific routing are retained.
 
-See `UPLOAD_INSTRUCTIONS.md` for deployment steps and Render environment settings. The production scan database is not included in this repository package. Paid API billing can raise quotas, but cannot guarantee that 503 or 504 errors will disappear.
+Deployment: extract into the existing GitHub repository root, replace matching files and commit to main. Keep the same Render API key and environment variables. Do not upload the ZIP itself to the repository.
 
-Validator update: avoid false PROHIBITED_SCIENTIFIC_CLAIM on educational disclaimers and negated statements. Source-ID validation remains active.
+Website: source link rendering is controlled by the frontend. The backend now avoids emitting Markdown citation hyperlinks inside answer text, while returning `sources` separately. If the site's source rendering inserts links itself, frontend styling may still need a separate update.
+
+After deployment, test the exact question: "What do lichens primarily bioindicate about air quality?" and a multi-part bioindicator question. Verify `grounded_llm`, accuracy and source relevance. This is not a guarantee against Gemini 503/504 failures.
