@@ -1,14 +1,25 @@
-# Upload this entire folder to your existing GitHub repository
+# Update your existing repository
 
-Repository: https://github.com/rhishidhina-blip/ecosignal_ask_lichen-lens
+1. Extract this ZIP. Upload the extracted files into the **root** of your existing `ecosignal_ask_lichen-lens` GitHub repository, replacing same-name files. Do not upload the ZIP as one file.
+2. Commit to `main`; allow the existing Render service to redeploy.
+3. In **Render > Environment**, check these values (Render Dashboard values for an existing service may override `render.yaml`):
 
-1. Extract the ZIP locally.
-2. In the GitHub repository, upload **all seven root-level files** from the extracted folder using Add file > Upload files. Replace existing same-named files and commit to main. The `.python-version` and `.gitignore` files may be hidden by your operating system; enable hidden files if needed.
-3. Existing Render service should automatically deploy. If not, use Manual Deploy > Deploy latest commit.
-4. Keep your existing Render service Environment settings. This file supplies Render Blueprint defaults but **updating render.yaml alone does not necessarily modify environment variables on an existing manually-created service**. In Render > Environment, set `ECOSIGNAL_CHAT_MODEL=gemini-3.1-flash-lite`, `ECOSIGNAL_CHAT_FALLBACK_MODELS=gemini-3.8-flash`, `ECOSIGNAL_ALLOWED_ORIGINS=https://ecosignal-app.dhina-srini.chatgpt.site`, and leave your secret `GEMINI_API_KEY` as-is.
-5. Keep your existing Render build command `python -m pip install --only-binary=:all: -r requirements.txt` and start command `uvicorn main:api --host 0.0.0.0 --port $PORT`.
-6. Verify https://ecosignal-ask-lichen-lens.onrender.com/assistant/health and POST `/assistant/ask` from `/docs`.
+- `ECOSIGNAL_CHAT_MODEL=gemini-3.1-flash-lite`
+- `ECOSIGNAL_CHAT_FALLBACK_MODELS=gemini-3.8-flash`
+- `ECOSIGNAL_GEMINI_TIMEOUT_MS=30000`
+- `ECOSIGNAL_GEMINI_CONCURRENCY=1`
+- `ECOSIGNAL_GEMINI_MAX_ATTEMPTS=2`
+- `ECOSIGNAL_GEMINI_BACKOFF_SECONDS=1.0`
+- `ECOSIGNAL_GEMINI_QUEUE_TIMEOUT_SECONDS=8`
 
-The ZIP is a complete **backend** repository package. The existing EcoSignal website is a separate site project. Its React UI changes must be deployed in that site's source and cannot be applied just by uploading this backend repository ZIP.
+Keep `GEMINI_API_KEY` stored privately in Render.
 
-No API key or private scan database is included. Real scan-specific answers still require connecting production database securely.
+4. Test `https://ecosignal-ask-lichen-lens.onrender.com/docs` > POST `/assistant/ask` with:
+
+```json
+{"question":"What are soredia in lichens?","user_id":"cac-validation-test"}
+```
+
+5. Watch Render logs for `GEMINI_OK`, `GEMINI_ERROR`, `GEMINI_BACKOFF` and `CHAT_RESULT`.
+
+Notes: Each failed 503/504 can now take up to 30 seconds per model plus backoff, so a two-model attempt may take around a minute. A frontend timeout shorter than this should be increased separately. The concurrency limit is per server process, not global across scaled instances. API rate limits and outages still require fallback.

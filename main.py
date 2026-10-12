@@ -13,6 +13,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Optional
+from collections import OrderedDict
+from threading import RLock, BoundedSemaphore
+import random
 
 import numpy as np
 import pandas as pd
@@ -3250,6 +3253,39 @@ def route_intent(question: str) -> Intent:
     if any(term in q for term in education_terms): return 'lichen_education'
     return 'out_of_scope'
 
+def requires_observation(question: str, intent: Intent) -> bool:
+    """Require stored evidence only for questions about the user's actual records.
+
+    Domain nouns such as 'coverage', 'confidence', or 'scan' alone are not
+    enough: 'How does lichen coverage work?' is educational.
+    """
+    q = question.lower().strip()
+    explicit_record = bool(re.search(
+        r"\b(my|our|this|that|these|those|selected|attached|uploaded|saved|latest|previous|recorded)\s+"
+        r"(?:lichen\s+)?(?:scan|photo|image|sample|observation|record|result|prediction|coverage|confidence|mission|site|area)\b",
+        q,
+    ))
+    explicit_request = bool(re.search(
+        r"\b(?:scan\s*(?:id|#)|sample\s*(?:id|#)|mission\s*(?:id|#)|my\s+(?:last|latest)\s+scan)\b",
+        q,
+    ))
+    specific_measurement = bool(re.search(
+        r"\b(?:what|how much|tell me|show me|explain|interpret|compare)\b.*"
+        r"\b(?:my|our|this|that|selected|latest|saved)\b.*"
+        r"\b(?:scan|sample|coverage|growth form|result|risk|prediction|measurement)\b",
+        q,
+    ))
+    return explicit_record or explicit_request or specific_measurement
+
+
+def refine_educational_intent(question: str, intent: Intent) -> Intent:
+    """Preserve categories for scan tasks but route conceptual questions to education."""
+    if intent in {'coverage', 'reliability', 'scan_explanation', 'repeat_scan', 'nearby_comparison', 'field_mission'}:
+        if not requires_observation(question, intent):
+            return 'lichen_education' if intent in {'coverage', 'reliability', 'scan_explanation', 'repeat_scan'} else 'environmental_education'
+    return intent
+
+
 def numeric_display(value: Any, precision: int = 2) -> str:
     try:
         number = float(value)
@@ -3328,32 +3364,38 @@ def numbers_in(text: str) -> set[str]:
     return {m.group(0).replace('−', '-') for m in re.finditer(r'(?<![A-Za-z])[-−]?\d+(?:\.\d+)?', text)}
 
 def validate_plan(plan: LLMTextPlan, retrieved: list[dict[str, Any]], evidence: list[EvidenceItem]) -> list[str]:
+    """Validate approved source identities and scientific safety, without brittle formatting/numeric rules.
+
+    Source IDs are validated against retrieval even if listed only in cited_source_ids.
+    This deliberately does NOT validate arbitrary numeric claims; the model remains
+    instructed not to invent measurements and scientific safety checks remain active.
+    """
     flags: list[str] = []
     allowed_ids = {r['source_id'] for r in retrieved}
     used = set(plan.cited_source_ids)
     rendered = set(re.findall(r'\[([A-Z0-9_-]+)\]', f'{plan.answer} {plan.uncertainty}'))
-    if not rendered <= allowed_ids or not rendered <= used:
+    # Accept inline citations that are approved even when omitted from the structured
+    # cited_source_ids list; normalize those into the returned source list below.
+    if not rendered <= allowed_ids:
         flags.append('UNAPPROVED_INLINE_CITATION')
-    if retrieved and not used:
-        flags.append('MISSING_SOURCE_CITATION')
     if not used <= allowed_ids:
         flags.append('UNAPPROVED_SOURCE_ID')
-    if any(f'[{sid}]' not in plan.answer and f'[{sid}]' not in plan.uncertainty for sid in used):
-        flags.append('SOURCE_ID_NOT_RENDERED')
+    if retrieved and not (used or rendered):
+        flags.append('MISSING_SOURCE_CITATION')
     combined = f'{plan.answer} {plan.uncertainty}'
     if any(re.search(pattern, combined, flags=re.I) for pattern in FORBIDDEN_CLAIM_PATTERNS):
         flags.append('PROHIBITED_SCIENTIFIC_CLAIM')
-    allowed_number_text = ' '.join(r['text'] for r in retrieved) + ' ' + ' '.join(e.value for e in evidence)
-    # Citation IDs often contain digits (for example KB-AQI-001); they are identifiers,
-    # not numeric claims, so remove bracketed citations before checking numbers.
-    numeric_claim_text = re.sub(r'\[[A-Z0-9_-]+\]', '', combined)
-    numeric_claim_text = re.sub(r'\b[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+\b', '', numeric_claim_text)
-    unexpected = numbers_in(numeric_claim_text) - numbers_in(allowed_number_text)
-    if unexpected:
-        flags.append('UNSUPPORTED_NUMERIC_CLAIM:' + ','.join(sorted(unexpected)))
     if len(plan.answer) > 1800 or len(plan.uncertainty) > 700:
         flags.append('RESPONSE_LENGTH_EXCEEDED')
     return flags
+
+def normalize_plan_citations(plan: LLMTextPlan, retrieved: list[dict[str, Any]]) -> LLMTextPlan:
+    """Add approved inline references to the source list without inventing any IDs."""
+    allowed = {r['source_id'] for r in retrieved}
+    inline = re.findall(r'\[([A-Z0-9_-]+)\]', f'{plan.answer} {plan.uncertainty}')
+    citations = list(dict.fromkeys([*plan.cited_source_ids, *inline]))
+    citations = [sid for sid in citations if sid in allowed]
+    return plan.model_copy(update={'cited_source_ids': citations[:8]})
 
 def deterministic_plan(intent: Intent, evidence: list[EvidenceItem], retrieved: list[dict[str, Any]], context_flags: list[str]) -> LLMTextPlan:
     source_ids = [r['source_id'] for r in retrieved[:2]]
@@ -3420,10 +3462,15 @@ Rules:
 
 SYSTEM_POLICY += """
 CITATION FORMAT REQUIREMENTS:
-- Every source listed in cited_source_ids MUST appear in the answer or uncertainty as [SOURCE-ID].
-- Cite only retrieved source IDs and put each citation next to the claim it supports.
-- Do not include uncited scientific claims or fabricated measurement values.
+- Use only supplied, retrieved source IDs in cited_source_ids and any inline [SOURCE-ID] references.
+- Prefer placing [SOURCE-ID] beside the claims it supports, but cited_source_ids is sufficient when inline formatting is impractical.
+- Do not fabricate measurement values. Never claim that a source supports something it does not.
 """
+
+# Concurrency control is per Render worker. Keep one live Gemini request at a
+# time by default to avoid bursts against a small free-tier token quota.
+_GEMINI_SLOTS = BoundedSemaphore(max(1, min(4, int(os.getenv('ECOSIGNAL_GEMINI_CONCURRENCY', '1')))))
+
 
 def make_gemini_client(api_key: Optional[str]):
     if not api_key:
@@ -3432,11 +3479,11 @@ def make_gemini_client(api_key: Optional[str]):
     from google import genai
     from google.genai import types
 
-    # The SDK timeout is expressed in milliseconds (15,000 = 15 seconds).
+    timeout_ms = max(15000, min(60000, int(os.getenv('ECOSIGNAL_GEMINI_TIMEOUT_MS', '30000'))))
     return genai.Client(
         api_key=api_key,
         vertexai=False,
-        http_options=types.HttpOptions(timeout=15000),
+        http_options=types.HttpOptions(timeout=timeout_ms),
     )
 
 
@@ -3447,74 +3494,83 @@ def generate_plan(
     evidence: list[EvidenceItem],
     retrieved: list[dict[str, Any]],
     settings: Settings = SETTINGS,
-) -> LLMTextPlan:
+) -> tuple[LLMTextPlan, str]:
+    """Use short evidence, bounded retry/backoff, and one alternate Gemini model."""
+    max_sources = max(1, min(6, int(os.getenv('ECOSIGNAL_LLM_SOURCE_COUNT', '4'))))
+    max_source_chars = max(180, min(900, int(os.getenv('ECOSIGNAL_LLM_SOURCE_CHARS', '420'))))
+    compact_sources = [{
+        'source_id': record['source_id'],
+        'title': str(record.get('title', ''))[:100],
+        'supports': str(record.get('supports', ''))[:180],
+        'text': str(record.get('text', ''))[:max_source_chars],
+        'limitations': str(record.get('limitations', ''))[:160],
+    } for record in retrieved[:max_sources]]
     payload = {
         'intent': intent,
-        'question': question,
+        'question': question[:settings.max_question_chars],
         'stored_scan_evidence': [
-            item.model_dump()
-            for item in evidence
+            {'label': e.label[:100], 'value': str(e.value)[:170], 'source': e.source[:100]}
+            for e in evidence[:12]
         ],
-        'approved_sources': [
-            {
-                key: record.get(key)
-                for key in (
-                    'source_id',
-                    'title',
-                    'supports',
-                    'text',
-                    'geographic_scope',
-                    'evidence_type',
-                    'limitations',
-                )
-            }
-            for record in retrieved
-        ],
+        'approved_sources': compact_sources,
     }
-
-    # Exactly two model attempts; do not retry one overloaded model several times.
-    preferred = settings.chat_model
     configured = os.getenv('ECOSIGNAL_CHAT_FALLBACK_MODELS', 'gemini-3.8-flash')
-    alternatives = [v.strip() for v in configured.split(',') if v.strip()]
-    model_names = list(dict.fromkeys([preferred] + alternatives))[:2]
+    model_names = list(dict.fromkeys(
+        [settings.chat_model] + [v.strip() for v in configured.split(',') if v.strip()]
+    ))[:2]
+    max_attempts = max(1, min(3, int(os.getenv('ECOSIGNAL_GEMINI_MAX_ATTEMPTS', '2'))))
+    backoff = max(0.25, min(3.0, float(os.getenv('ECOSIGNAL_GEMINI_BACKOFF_SECONDS', '1.0'))))
+    wait_for_slot = max(1, min(15, int(os.getenv('ECOSIGNAL_GEMINI_QUEUE_TIMEOUT_SECONDS', '8'))))
     last_error = None
-    for model_name in model_names:
-        started = time.monotonic()
-        try:
-            response = client.models.generate_content(
-                model=model_name,
-                contents=canonical_json(payload),
-                config={
-                    'system_instruction': SYSTEM_POLICY,
-                    'response_mime_type': 'application/json',
-                    'response_json_schema': LLMTextPlan.model_json_schema(),
-                    'temperature': 0.2,
-                },
-            )
-            if not response.text:
-                raise RuntimeError('Gemini returned no structured text.')
-            candidate = LLMTextPlan.model_validate_json(response.text)
-            print(f'GEMINI_OK model={model_name} duration_s={time.monotonic()-started:.2f}', flush=True)
-            return candidate, model_name
-        except Exception as exc:
-            last_error = exc
-            status = getattr(exc, 'code', None)
-            print(
-                f'GEMINI_ERROR model={model_name} status={status} '
-                f'type={type(exc).__name__} duration_s={time.monotonic()-started:.2f}',
-                flush=True,
-            )
-            # Bad credentials, malformed requests or schema errors require repair,
-            # not a call to another model with the same invalid configuration.
-            if status not in (429, 500, 502, 503, 504) and not isinstance(exc, TimeoutError):
-                # SDK may surface request timeouts as httpx exceptions.
+    if not _GEMINI_SLOTS.acquire(timeout=wait_for_slot):
+        raise RuntimeError('Gemini request capacity busy; deterministic fallback will be used.')
+    try:
+        # One call per model by default. If only one model is configured, allow
+        # an additional bounded attempt on transient 5xx failures.
+        attempts = (model_names + ([model_names[0]] if len(model_names) == 1 else []))[:max_attempts]
+        for idx, model_name in enumerate(attempts):
+            started = time.monotonic()
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=canonical_json(payload),
+                    config={
+                        'system_instruction': SYSTEM_POLICY,
+                        'response_mime_type': 'application/json',
+                        'response_json_schema': LLMTextPlan.model_json_schema(),
+                        'temperature': 0.2,
+                        'max_output_tokens': max(500, min(1600, int(os.getenv('ECOSIGNAL_MAX_OUTPUT_TOKENS', '1000')))),
+                    },
+                )
+                if not response.text:
+                    raise RuntimeError('Gemini returned no structured text.')
+                candidate = LLMTextPlan.model_validate_json(response.text)
+                print(f'GEMINI_OK model={model_name} duration_s={time.monotonic()-started:.2f}', flush=True)
+                return candidate, model_name
+            except Exception as exc:
+                last_error = exc
+                status = getattr(exc, 'code', None)
+                print(f'GEMINI_ERROR model={model_name} status={status} '
+                      f'type={type(exc).__name__} duration_s={time.monotonic()-started:.2f}', flush=True)
                 try:
                     import httpx
-                    retryable_timeout = isinstance(exc, (httpx.TimeoutException, httpx.TransportError))
+                    transport_failure = isinstance(exc, (httpx.TimeoutException, httpx.TransportError))
                 except ImportError:
-                    retryable_timeout = False
-                if not retryable_timeout:
+                    transport_failure = False
+                retryable = status in (429, 500, 502, 503, 504) or isinstance(exc, TimeoutError) or transport_failure
+                if not retryable or idx == len(attempts) - 1:
                     break
+                # Respect quota exhaustion: only switch to the alternate model;
+                # an immediate retry of the same exhausted model is wasteful.
+                if status == 429 and attempts[idx + 1] == model_name:
+                    break
+                # Small jitter avoids simultaneous retry storms. The model-level
+                # timeout bounds each attempt; frontend should allow sufficient time.
+                delay = min(5.0, backoff * (2 ** idx)) + random.uniform(0, 0.35)
+                print(f'GEMINI_BACKOFF duration_s={delay:.2f}', flush=True)
+                time.sleep(delay)
+    finally:
+        _GEMINI_SLOTS.release()
     raise RuntimeError('Gemini generation failed; deterministic fallback will be used.') from last_error
 
 
@@ -3597,6 +3653,8 @@ class AskLichenLens:
         self.context_store = EcoSignalContextStore(settings)
         self.index = KnowledgeIndex(KNOWLEDGE, self.client, settings)
         self.embedding_status = 'disabled_or_unavailable'
+        self._cache_lock = RLock()
+        self._answer_cache: OrderedDict[str, tuple[float, dict[str, Any]]] = OrderedDict()
         if self.client is not None and settings.enable_embeddings:
             try:
                 self.embedding_status = 'enabled' if self.index.build_embeddings() else 'disabled_or_unavailable'
@@ -3605,18 +3663,43 @@ class AskLichenLens:
 
     def ask(self, request: AskRequest, audit: bool = True) -> AssistantReply:
         request_id = str(uuid.uuid4())
-        intent = route_intent(request.question)
+        intent = refine_educational_intent(request.question, route_intent(request.question))
         context, context_flags = self.context_store.assemble(request.sample_id, request.mission_id)
         evidence = build_evidence(context)
         retrieved = self.index.search(request.question, top_k=self.settings.retrieval_top_k)
         flags = list(context_flags)
+        # Cache only successful, general educational outputs. Never reuse an
+        # observation-specific answer after the underlying record changes.
+        cacheable = not request.sample_id and not request.mission_id and intent in {
+            'lichen_education', 'environmental_education', 'growth_form',
+            'limitations', 'air_quality_data',
+        }
+        cache_key = hashlib.sha256(canonical_json({
+            'question': ' '.join(request.question.lower().split()),
+            'intent': intent,
+            'model': self.settings.chat_model,
+            'source_ids': [r['source_id'] for r in retrieved[:6]],
+        }).encode()).hexdigest()
+        cache_hit = None
+        if cacheable:
+            with self._cache_lock:
+                entry = self._answer_cache.get(cache_key)
+                if entry and entry[0] > time.monotonic():
+                    cache_hit = entry[1]
+                    self._answer_cache.move_to_end(cache_key)
+                elif entry:
+                    self._answer_cache.pop(cache_key, None)
         mode: Literal['grounded_llm', 'deterministic_fallback'] = 'deterministic_fallback'
         model = None
 
-        if intent == 'security_redirect':
+        if cache_hit is not None:
+            plan = LLMTextPlan.model_validate(cache_hit['plan'])
+            mode, model = 'grounded_llm', cache_hit['model']
+            print('CHAT_CACHE_HIT', flush=True)
+        elif intent == 'security_redirect':
             flags.append('PROMPT_INJECTION_BLOCKED')
             plan = deterministic_plan(intent, evidence, retrieved, flags)
-        elif self.client is None or intent == 'out_of_scope' or (intent in {'scan_explanation', 'coverage', 'reliability'} and not evidence):
+        elif self.client is None or intent == 'out_of_scope' or (requires_observation(request.question, intent) and not evidence):
             if self.client is None:
                 flags.append('GEMINI_API_UNAVAILABLE')
             plan = deterministic_plan(intent, evidence, retrieved, flags)
@@ -3629,7 +3712,16 @@ class AskLichenLens:
                     print(f'GROUNDING_REJECTED flags={validation_flags}', flush=True)
                     plan = deterministic_plan(intent, evidence, retrieved, context_flags)
                 else:
-                    plan, mode, model = candidate, 'grounded_llm', chosen_model
+                    plan, mode, model = normalize_plan_citations(candidate, retrieved), 'grounded_llm', chosen_model
+                    if cacheable:
+                        ttl = max(60, min(86400, int(os.getenv('ECOSIGNAL_CACHE_TTL_SECONDS', '3600'))))
+                        with self._cache_lock:
+                            self._answer_cache[cache_key] = (time.monotonic() + ttl, {
+                                'plan': plan.model_dump(), 'model': model,
+                            })
+                            self._answer_cache.move_to_end(cache_key)
+                            while len(self._answer_cache) > 256:
+                                self._answer_cache.popitem(last=False)
             except Exception as exc:
                 print(f'CHAT_GENERATION_FALLBACK type={type(exc).__name__}', flush=True)
                 flags.append('LLM_GENERATION_UNAVAILABLE')

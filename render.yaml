@@ -19,3 +19,13 @@ services:
         value: "0"
       - key: ECOSIGNAL_ENABLE_PUBLIC_AUDIT
         value: "0"
+      - key: ECOSIGNAL_GEMINI_TIMEOUT_MS
+        value: "30000"
+      - key: ECOSIGNAL_GEMINI_CONCURRENCY
+        value: "1"
+      - key: ECOSIGNAL_GEMINI_MAX_ATTEMPTS
+        value: "2"
+      - key: ECOSIGNAL_GEMINI_BACKOFF_SECONDS
+        value: "1.0"
+      - key: ECOSIGNAL_GEMINI_QUEUE_TIMEOUT_SECONDS
+        value: "8"
