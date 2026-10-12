@@ -1,19 +1,24 @@
-# EcoSignal Ask LichenLens — Answer Quality Update
+# EcoSignal Ask LichenLens — Semantic Context Update
 
-Render diagnostic update: see [RENDER_DIAGNOSTICS.md](RENDER_DIAGNOSTICS.md)
-for the disabled-by-default, one-time startup command and optional full-request
-comparison. No public diagnostic endpoint is added.
+The keyword topic router is removed. Gemini interprets the full current question
+and up to six recent messages, resolves follow-up referents and supplies a bounded
+standalone retrieval question. Retrieval and grounded answer generation follow.
+No particular words or phrase templates are required for topic acceptance.
 
-This is the complete GitHub-ready backend based on the context-aware validator deployment.
+Scientific claim checks, citation validation, stored-record requirements,
+concurrency, bounded retries, answer caching and audit logging remain. Targeted
+prompt/secret protection still runs separately. History is untrusted context,
+not scientific evidence. If AI interpretation fails, the assistant reports that
+uncertainty rather than falsely calling the question out of scope.
 
-New improvements:
-- The Gemini system instructions require a direct answer before uncertainty and methodological caveats.
-- Bioindicator questions prioritize the reviewed NPS lichen-bioindication knowledge record in lexical retrieval, rather than leading with regulatory caveats.
-- The backend normalizes Markdown-wrapped citation IDs to clean `[SOURCE-ID]` markers and continues checking that citations correspond to retrieved knowledge.
-- Existing token limits, response caching, retries/backoff, concurrency control, scientific validation and observation-specific routing are retained.
+Upload ZIP contents to the existing GitHub repository root and redeploy Render.
+Keep GEMINI_API_KEY private and the normal start command. Default primary model
+is gemini-3.1-flash-lite. See CONVERSATION_CONTEXT.md for website history support.
 
-Deployment: extract into the existing GitHub repository root, replace matching files and commit to main. Keep the same Render API key and environment variables. Do not upload the ZIP itself to the repository.
+Each uncached accepted request normally makes two generation calls: interpretation
+and answer. Each stage has the existing bounded application retries and timeout.
+Cached educational answers still require interpretation, but skip answer generation.
+SDK automatic retries are disabled so application limits are meaningful.
 
-Website: source link rendering is controlled by the frontend. The backend now avoids emitting Markdown citation hyperlinks inside answer text, while returning `sources` separately. If the site's source rendering inserts links itself, frontend styling may still need a separate update.
-
-After deployment, test the exact question: "What do lichens primarily bioindicate about air quality?" and a multi-part bioindicator question. Verify `grounded_llm`, accuracy and source relevance. This is not a guarantee against Gemini 503/504 failures.
+RENDER_DIAGNOSTICS.md describes the optional disabled one-shot diagnostic. The
+full diagnostic now tests both semantic interpretation and answer generation.

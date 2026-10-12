@@ -1,7 +1,7 @@
 # One-time Render Gemini diagnostic
 
-This package preserves the Answer Quality backend. `main.py` and requirements
-are unchanged. The diagnostic is a standalone command, disabled by default,
+This package preserves the Answer Quality improvements and adds semantic
+follow-up interpretation; requirements are unchanged. The diagnostic is a standalone command, disabled by default,
 with no HTTP route. It uses only the existing Render `GEMINI_API_KEY`; it never
 prints the key, provider text, request headers, raw exception or response body.
 
@@ -67,10 +67,10 @@ the flag, and manually run `python gemini_diagnostic.py` or
   disabled so each listed provider attempt corresponds to one generation call.
   `request_duration_s` excludes backend initialization; `duration_s` includes it.
 
-Minimal costs one generation call; full may add up to the configured application
-attempt limit (clamped by the backend to 1–3, with at most two configured models).
-Full normally uses up to two attempts and a 30-second HTTP timeout per attempt;
-startup may take over a minute. Timeouts are HTTP limits, not a strict total
+Minimal costs one generation call; full may add up to twice the configured application
+attempt limit (interpretation plus answer) (clamped by the backend to 1–3, with at most two configured models).
+Full normally uses up to four attempts across two stages and a 30-second HTTP timeout per attempt;
+startup may take over two minutes. Timeouts are HTTP limits, not a strict total
 wall-clock deadline. Calls may still be charged if the client times out.
 
 ## Read the results
@@ -84,7 +84,7 @@ wall-clock deadline. Calls may still be charged if the client times out.
 | `provider_unavailable` (5xx) | Provider rejected this attempt; compare timings and retry later manually. |
 | `timeout` / `transport_error` | The Render-side request timed out or transport failed. |
 | Minimal success + full `grounded_llm` | Both tested paths worked at that time. |
-| Minimal success + full `generation_unavailable` | Inspect `provider_attempts`: full schema/prompt/model calls failed, returned empty text, or failed parsing. Provider success plus generation failure suggests parsing or postprocessing. |
+| Minimal success + full `generation_unavailable` / `interpretation_unavailable` | Inspect `provider_attempts`: full schema/prompt/model calls failed, returned empty text, or failed parsing. Provider success plus generation failure suggests parsing or postprocessing. |
 | Minimal success + full `deterministic_fallback` | Generation did not yield an accepted grounded answer; provider success suggests validation or routing. |
 | `internal_or_sdk_error` / `diagnostic_internal_error` | Local initialization/SDK error; raw details are intentionally suppressed. |
 

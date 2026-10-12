@@ -140,7 +140,8 @@ def full_probe(key):
             flags = set(reply.safety_flags)
             result.update(mode=reply.mode, selected_model=safe_model(reply.model),
                 outcome='grounded_llm' if reply.mode == 'grounded_llm' else (
-                    'generation_unavailable' if 'LLM_GENERATION_UNAVAILABLE' in flags else 'deterministic_fallback'),
+                    'interpretation_unavailable' if 'SEMANTIC_INTERPRETATION_UNAVAILABLE' in flags else (
+                    'generation_unavailable' if 'LLM_GENERATION_UNAVAILABLE' in flags else 'deterministic_fallback')),
                 source_count=len(reply.sources),
                 generation_unavailable='LLM_GENERATION_UNAVAILABLE' in flags)
         finally:
