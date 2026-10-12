@@ -1,5 +1,8 @@
 # GitHub Deployment
 
+For the temporary Gemini connectivity test, follow
+[RENDER_DIAGNOSTICS.md](RENDER_DIAGNOSTICS.md) after uploading this package.
+
 1. Extract the ZIP locally.
 2. Open https://github.com/rhishidhina-blip/ecosignal_ask_lichen-lens
 3. Replace matching files in the repository ROOT (including main.py).

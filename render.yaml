@@ -19,6 +19,8 @@ services:
         value: "0"
       - key: ECOSIGNAL_ENABLE_PUBLIC_AUDIT
         value: "0"
+      - key: ECOSIGNAL_ENABLE_GEMINI_DIAGNOSTICS
+        value: "0"
       - key: ECOSIGNAL_GEMINI_TIMEOUT_MS
         value: "30000"
       - key: ECOSIGNAL_GEMINI_CONCURRENCY

@@ -1,5 +1,9 @@
 # EcoSignal Ask LichenLens — Answer Quality Update
 
+Render diagnostic update: see [RENDER_DIAGNOSTICS.md](RENDER_DIAGNOSTICS.md)
+for the disabled-by-default, one-time startup command and optional full-request
+comparison. No public diagnostic endpoint is added.
+
 This is the complete GitHub-ready backend based on the context-aware validator deployment.
 
 New improvements:
