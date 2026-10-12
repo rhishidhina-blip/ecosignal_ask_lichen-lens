@@ -3658,6 +3658,8 @@ from threading import Lock
 from fastapi.middleware.cors import CORSMiddleware
 
 api = FastAPI(title='EcoSignal Ask LichenLens', version='1.0.0')
+from georisk_api import create_georisk_router
+api.include_router(create_georisk_router(Path(__file__).parent / 'geomorphology_assets'))
 api.add_middleware(
     CORSMiddleware,
     allow_origins=[origin.strip() for origin in os.getenv('ECOSIGNAL_ALLOWED_ORIGINS', 'http://localhost:3000').split(',') if origin.strip()],
