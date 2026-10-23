@@ -1,0 +1,33 @@
+{
+  "package": "EcoSignal_Ask_LichenLens_Single_Call_GitHub",
+  "created_date": "2026-10-23",
+  "github_pushed": false,
+  "deployed": false,
+  "backend_behavior_checks_passed": 25,
+  "diagnostic_checks_passed": 7,
+  "website_checks_passed": 11,
+  "files": {
+    ".gitignore": "b67dce5169ff11869f1e4f6b2a3cebd5c21320bf752e6036e293816dd5528c59",
+    ".python-version": "35cafb8c702c5f217b67df5648dfb141cba38156c135a85cf5026d4d92d6bab3",
+    "CONVERSATION_CONTEXT.md": "88fb532abb7aad7efdff85dacb3dd11f454a257dbe6ad8fb0f5fe0a5976054ee",
+    "gemini_diagnostic.py": "c3c61789b53276b22e5813592c65889ee90fed05d178ee98b27645596fa9fd4d",
+    "main.py": "1fa88591b9fd7c2113d06720c3b609deda624f61a3cd14db62abc68088fb05b1",
+    "measure_response_times.py": "c9dd339866edefd2e213ca671d3f664b1e222dd94b267d7b2e1dabae457bc21d",
+    "README.md": "b8ca8a5c1e9b6382d0f36ebef76b812b22e8aeda15a2356cd2044ffa2720a3a2",
+    "render.yaml": "8100e4cf1c3d492304f376bb47423c4f5815ccf7bbfd88f8ccb25b8afc761965",
+    "RENDER_DIAGNOSTICS.md": "f9949b5b346566dd49736b68600aaf661f3816fd1597400fd50c07813e8a28c7",
+    "requirements.txt": "984c4d3687fbb4f8fdfa948581bdd833b9e80c71209b75a8799b12e5d95aea2f",
+    "RESPONSE_TIMES.json": "b04a27a7ad657937907fa6a29597efa3395bed2e6940f3cb18e185bbf3386887",
+    "semantic_checks.py": "73f7fc9017cfe56c049b495d84c826f849f99997c7b7b636009a015f1024a950",
+    "tests/test_diagnostic.py": "12968a43dd55ca51c21e72212e9b583ecdc0e9c5e182dc8ca49a01535c730cfa",
+    "tests/test_semantic.py": "35dc6cf7f431858fb9364b5df6ace2b2e9f4a79e547251f0d389fd3277e16cfb",
+    "UPLOAD_INSTRUCTIONS.md": "78785f7c9bed349ab133face6c00cf98f489a5dfa7b03801ac3cfa002fa6dda5",
+    "VALIDATION.md": "25e41436c736317155c3ee7448088ec0eccd1b39082a22cb95f386ecd5971f76",
+    "website-update/app/assistant-panel.tsx": "945b33cbe12dc7c1cbd032547de6e1503e90f4876c1108b30b42464db239b234",
+    "website-update/app/lib/assistant.ts": "b049b768e59fb60d964f63f1cd695695c9d1c834610b989045b5c4493c322e75",
+    "website-update/app/lib/chat-request.ts": "86fcc6b968e3d5ac45e9ef54bb280fea77a2fe8205bd81b2bfa383fe3c987163",
+    "website-update/app/lib/chat-response.ts": "fbc5554c5d3b98136e5c2214f7f64945601a93b71d76c5943617a11275eb3ec8",
+    "website-update/tests/chat-request.test.mjs": "0691c00248fedf9c816ce9b6c51bb0de3aa5eb4aced3e51b4b6a579f84e5267f",
+    "website-update/tests/chat-response.test.mjs": "080e2868122f72d3b3e5cd35c915adced8cad3a46bacc812e0310b09f5e22e08"
+  }
+}

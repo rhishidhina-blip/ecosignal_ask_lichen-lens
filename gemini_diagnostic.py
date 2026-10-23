@@ -125,7 +125,7 @@ def full_probe(key):
     os.environ['ECOSIGNAL_ENABLE_EMBEDDINGS'] = '0'
     try:
         import main
-        timeout_ms = max(15000, min(60000, int(os.getenv('ECOSIGNAL_GEMINI_TIMEOUT_MS', '30000'))))
+        timeout_ms = main.provider_limits()['timeout_ms']
         client = new_client(key, timeout_ms)
         traced = TracedClient(client)
         # Standalone process starts with a fresh cache; clear it explicitly too.

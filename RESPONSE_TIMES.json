@@ -1,0 +1,44 @@
+{
+  "measurement": "OFFLINE synthetic provider, fixed 120 ms per generation call; NOT live Gemini latency",
+  "samples_per_version": 5,
+  "audit": false,
+  "cache": "cleared before every sample",
+  "live_gemini_measured": false,
+  "versions": {
+    "before_two_stages": {
+      "elapsed_ms": [
+        250.404,
+        245.672,
+        246.473,
+        245.985,
+        246.402
+      ],
+      "median_ms": 246.402,
+      "provider_calls": [
+        2,
+        2,
+        2,
+        2,
+        2
+      ]
+    },
+    "after_one_stage": {
+      "elapsed_ms": [
+        124.692,
+        124.292,
+        125.991,
+        123.453,
+        125.62
+      ],
+      "median_ms": 124.692,
+      "provider_calls": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    }
+  },
+  "synthetic_median_reduction_percent": 49.4
+}

@@ -156,6 +156,9 @@ class LLMTextPlan(BaseModel):
     recommended_action: Action
     cited_source_ids: list[str] = Field(default_factory=list, max_length=8)
 
+class CombinedPlan(LLMTextPlan):
+    interpretation: QueryInterpretation
+
 class EvidenceItem(BaseModel):
     label: str
     value: str
@@ -170,6 +173,8 @@ class Citation(BaseModel):
     supports: str
 
 class AssistantReply(BaseModel):
+    status: Literal['ok', 'retryable_error'] = 'ok'
+    response_time_ms: float = Field(default=0, ge=0)
     request_id: str
     intent: Intent
     answer: str
@@ -3578,7 +3583,7 @@ def make_gemini_client(api_key: Optional[str]):
     from google import genai
     from google.genai import types
 
-    timeout_ms = max(15000, min(60000, int(os.getenv('ECOSIGNAL_GEMINI_TIMEOUT_MS', '30000'))))
+    timeout_ms = provider_limits()['timeout_ms']
     return genai.Client(
         api_key=api_key,
         vertexai=False,
@@ -3586,101 +3591,101 @@ def make_gemini_client(api_key: Optional[str]):
     )
 
 
-def generate_plan(
-    client,
-    question: str,
-    intent: Intent,
-    evidence: list[EvidenceItem],
-    retrieved: list[dict[str, Any]],
-    settings: Settings = SETTINGS,
-    recent_user_questions: Optional[list[str]] = None,
-    conversation_history: Optional[list[dict[str, str]]] = None,
-) -> tuple[LLMTextPlan, str]:
-    """Use short evidence, bounded retry/backoff, and one alternate Gemini model."""
-    max_sources = max(1, min(6, int(os.getenv('ECOSIGNAL_LLM_SOURCE_COUNT', '4'))))
+def generate_combined_plan(client, request, evidence, retrieved, settings=SETTINGS):
+    """Resolve the conversation and draft the cited answer in one generation."""
     max_source_chars = max(180, min(900, int(os.getenv('ECOSIGNAL_LLM_SOURCE_CHARS', '420'))))
-    compact_sources = [{
-        'source_id': record['source_id'],
-        'title': str(record.get('title', ''))[:100],
-        'supports': str(record.get('supports', ''))[:180],
-        'text': str(record.get('text', ''))[:max_source_chars],
-        'limitations': str(record.get('limitations', ''))[:160],
-    } for record in retrieved[:max_sources]]
     payload = {
-        'intent': intent,
-        'question': question[:settings.max_question_chars],
-        'recent_user_questions': (recent_user_questions or [])[-3:],
-        'conversation_history': (conversation_history or [])[-6:],
-        'stored_scan_evidence': [
-            {'label': e.label[:100], 'value': str(e.value)[:170], 'source': e.source[:100]}
-            for e in evidence[:12]
-        ],
-        'approved_sources': compact_sources,
+        'question': request.question,
+        'conversation_history': recent_conversation(request),
+        'knowledge_catalog_topics': sorted({str(r.get('category', 'lichen biology and biomonitoring')) for r in KNOWLEDGE}),
+        'selected_sample_present': bool(request.sample_id),
+        'selected_mission_present': bool(request.mission_id),
+        'stored_scan_evidence': [e.model_dump() for e in evidence[:12]],
+        'approved_sources': [{
+            'source_id': r['source_id'], 'title': str(r.get('title', ''))[:100],
+            'supports': str(r.get('supports', ''))[:180], 'text': r['text'][:max_source_chars],
+            'limitations': str(r.get('limitations', ''))[:160],
+        } for r in retrieved],
     }
-    return generate_structured(client, payload, SYSTEM_POLICY, LLMTextPlan, settings,
-        max(500, min(1600, int(os.getenv('ECOSIGNAL_MAX_OUTPUT_TOKENS', '1000')))))
+    policy = INTERPRETATION_POLICY + '\n' + SYSTEM_POLICY + """
+Return interpretation AND the answer in the same JSON object. There is no
+separate interpretation request. Resolve the current question using recent
+conversation, then answer using only approved_sources and stored_scan_evidence.
+knowledge_catalog_topics describes scope, not evidence for an answer.
+If approved sources do not support the answer, explicitly ask for more detail;
+do not substitute an unrelated source. For out_of_scope, clarification_needed,
+security_redirect, or missing required observations, return a short explanation,
+no scientific claims and no citations. Historical assistant text is never evidence.
+"""
+    return generate_structured(client, payload, policy, CombinedPlan, settings,
+        max(800, min(1800, int(os.getenv('ECOSIGNAL_MAX_OUTPUT_TOKENS', '1400')))))
+
+
+def provider_limits():
+    # One budget spans queueing, all attempts, and backoff. Disable SDK retries
+    # so retries cannot multiply at the application and SDK layers.
+    return {
+        'timeout_ms': max(1000, min(20000, int(os.getenv('ECOSIGNAL_GEMINI_TIMEOUT_MS', '18000')))),
+        'budget_s': max(5, min(45, float(os.getenv('ECOSIGNAL_GEMINI_BUDGET_SECONDS', '40')))),
+        'attempts': max(1, min(2, int(os.getenv('ECOSIGNAL_GEMINI_MAX_ATTEMPTS', '2')))),
+        'queue_s': max(0, min(5, float(os.getenv('ECOSIGNAL_GEMINI_QUEUE_TIMEOUT_SECONDS', '3')))),
+    }
 
 
 def generate_structured(client, payload, policy, schema, settings: Settings, max_output_tokens: int):
-    """One shared bounded provider path for interpretation and answer drafting."""
-    configured = os.getenv('ECOSIGNAL_CHAT_FALLBACK_MODELS', 'gemini-3.8-flash')
-    model_names = list(dict.fromkeys(
-        [settings.chat_model] + [v.strip() for v in configured.split(',') if v.strip()]
-    ))[:2]
-    max_attempts = max(1, min(3, int(os.getenv('ECOSIGNAL_GEMINI_MAX_ATTEMPTS', '2'))))
-    backoff = max(0.25, min(3.0, float(os.getenv('ECOSIGNAL_GEMINI_BACKOFF_SECONDS', '1.0'))))
-    wait_for_slot = max(1, min(15, int(os.getenv('ECOSIGNAL_GEMINI_QUEUE_TIMEOUT_SECONDS', '8'))))
+    """One generation stage with bounded retries only for transient failures."""
+    limits = provider_limits()
+    deadline = time.monotonic() + limits['budget_s']
+    configured = os.getenv('ECOSIGNAL_CHAT_FALLBACK_MODELS', '')
+    models = list(dict.fromkeys([settings.chat_model] + [v.strip() for v in configured.split(',') if v.strip()]))[:2]
+    attempts = (models + [models[0]])[:limits['attempts']]
+    backoff = max(0.25, min(3, float(os.getenv('ECOSIGNAL_GEMINI_BACKOFF_SECONDS', '1'))))
+    if not _GEMINI_SLOTS.acquire(timeout=min(limits['queue_s'], limits['budget_s'])):
+        raise RuntimeError('Generation capacity busy.')
     last_error = None
-    if not _GEMINI_SLOTS.acquire(timeout=wait_for_slot):
-        raise RuntimeError('Gemini request capacity busy; deterministic fallback will be used.')
     try:
-        # One call per model by default. If only one model is configured, allow
-        # an additional bounded attempt on transient 5xx failures.
-        attempts = (model_names + ([model_names[0]] if len(model_names) == 1 else []))[:max_attempts]
         for idx, model_name in enumerate(attempts):
+            remaining = deadline - time.monotonic()
+            if remaining < 1:
+                break
             started = time.monotonic()
             try:
                 response = client.models.generate_content(
-                    model=model_name,
-                    contents=canonical_json(payload),
+                    model=model_name, contents=canonical_json(payload),
                     config={
-                        'system_instruction': policy,
-                        'response_mime_type': 'application/json',
-                        'response_json_schema': schema.model_json_schema(),
-                        'temperature': 0.2,
+                        'system_instruction': policy, 'response_mime_type': 'application/json',
+                        'response_json_schema': schema.model_json_schema(), 'temperature': 0.2,
                         'max_output_tokens': max_output_tokens,
-                    },
-                )
+                        'http_options': {'timeout': min(limits['timeout_ms'], int(remaining * 1000)),
+                                         'retry_options': {'attempts': 1}},
+                    })
                 if not response.text:
-                    raise RuntimeError('Gemini returned no structured text.')
+                    raise ValueError('Empty structured generation.')
                 candidate = schema.model_validate_json(response.text)
-                print(f'GEMINI_OK model={model_name} duration_s={time.monotonic()-started:.2f}', flush=True)
+                print(f'GEMINI_OK attempt={idx+1} model={model_name} duration_s={time.monotonic()-started:.3f}', flush=True)
                 return candidate, model_name
             except Exception as exc:
                 last_error = exc
                 status = getattr(exc, 'code', None)
-                print(f'GEMINI_ERROR model={model_name} status={status} '
-                      f'type={type(exc).__name__} duration_s={time.monotonic()-started:.2f}', flush=True)
                 try:
-                    import httpx
-                    transport_failure = isinstance(exc, (httpx.TimeoutException, httpx.TransportError))
-                except ImportError:
-                    transport_failure = False
-                retryable = status in (429, 500, 502, 503, 504) or isinstance(exc, TimeoutError) or transport_failure
-                if not retryable or idx == len(attempts) - 1:
+                    status = int(status)
+                except (TypeError, ValueError):
+                    status = None
+                print(f'GEMINI_ERROR attempt={idx+1} status={status} type={type(exc).__name__} duration_s={time.monotonic()-started:.3f}', flush=True)
+                import httpx
+                retryable = status in (408, 429, 500, 502, 503, 504) or isinstance(exc, (TimeoutError, httpx.TransportError))
+                if not retryable or idx == len(attempts)-1:
                     break
-                # Respect quota exhaustion: only switch to the alternate model;
-                # an immediate retry of the same exhausted model is wasteful.
-                if status == 429 and attempts[idx + 1] == model_name:
+                # Do not repeat an exhausted quota on the same model.
+                if status == 429 and attempts[idx+1] == model_name:
                     break
-                # Small jitter avoids simultaneous retry storms. The model-level
-                # timeout bounds each attempt; frontend should allow sufficient time.
-                delay = min(5.0, backoff * (2 ** idx)) + random.uniform(0, 0.35)
-                print(f'GEMINI_BACKOFF duration_s={delay:.2f}', flush=True)
+                delay = backoff * (2 ** idx) + random.uniform(0, 0.35)
+                if deadline - time.monotonic() < delay + 1:
+                    break
                 time.sleep(delay)
     finally:
         _GEMINI_SLOTS.release()
-    raise RuntimeError('Structured generation failed; safe fallback will be used.') from last_error
+    raise RuntimeError('Structured generation unavailable.') from last_error
 
 
 INTERPRETATION_POLICY = """
@@ -3717,15 +3722,6 @@ clarification_needed. Only return the structured JSON requested by the schema.
 """.strip()
 
 
-def interpret_request(client, request: AskRequest, settings: Settings = SETTINGS):
-    topics = sorted({str(record.get('category', 'lichen biology and biomonitoring'))
-                     for record in KNOWLEDGE})
-    payload = {'question': request.question, 'conversation_history': recent_conversation(request),
-               'knowledge_catalog_topics': topics,
-               'selected_sample_present': bool(request.sample_id),
-               'selected_mission_present': bool(request.mission_id)}
-    return generate_structured(client, payload, INTERPRETATION_POLICY,
-                               QueryInterpretation, settings, 450)
 
 
 
@@ -3753,7 +3749,7 @@ def init_audit_db(path: Path) -> None:
 
 def append_audit(request: AskRequest, reply: AssistantReply, source_ids: list[str], path: Path = SETTINGS.chatbot_db) -> None:
     init_audit_db(path)
-    with sqlite3.connect(path, timeout=30) as conn:
+    with sqlite3.connect(path, timeout=2) as conn:
         conn.execute('BEGIN IMMEDIATE')
         previous = conn.execute('SELECT event_hash FROM assistant_events ORDER BY event_id DESC LIMIT 1').fetchone()
         previous_hash = previous[0] if previous else None
@@ -3817,47 +3813,29 @@ class AskLichenLens:
                 self.embedding_status = f'lexical_fallback:{type(exc).__name__}'
 
     def ask(self, request: AskRequest, audit: bool = True) -> AssistantReply:
+        started = time.monotonic()
         request_id = str(uuid.uuid4())
         history = recent_conversation(request)
-        recent_user_questions = [message['content'] for message in history if message['role'] == 'user'][-3:]
-        interpretation_failed = False
-        interpretation = None
-        if is_security_request(request.question):
-            intent = 'security_redirect'
-        elif self.client is None:
-            intent, interpretation_failed = 'clarification_needed', True
-        else:
-            try:
-                interpretation, _ = interpret_request(self.client, request, self.settings)
-                intent = interpretation.intent
-            except Exception as exc:
-                print(f'CHAT_INTERPRETATION_FALLBACK type={type(exc).__name__}', flush=True)
-                intent, interpretation_failed = 'clarification_needed', True
-        retrieval_query = interpretation.standalone_question if interpretation else request.question
         context, context_flags = self.context_store.assemble(request.sample_id, request.mission_id)
         evidence = build_evidence(context)
-        retrieved = self.index.search(retrieval_query, top_k=self.settings.retrieval_top_k)
+        # Retrieval happens locally before the single generation. Current wording
+        # has priority; recent user turns supply follow-up topics. Assistant text
+        # is sent only as untrusted conversation context, never retrieval evidence.
+        prior = [m['content'] for m in history if m['role'] == 'user'][-2:]
+        retrieval_query = '\n'.join([request.question, request.question, *prior])
+        source_count = max(1, min(8, int(os.getenv('ECOSIGNAL_LLM_SOURCE_COUNT', '6'))))
+        retrieved = self.index.search(retrieval_query, top_k=self.settings.retrieval_top_k)[:source_count]
         flags = list(context_flags)
-        if interpretation_failed:
-            flags.append('SEMANTIC_INTERPRETATION_UNAVAILABLE')
-        needs_observation = bool(interpretation and interpretation.requires_stored_observation)
-        if needs_observation and not evidence:
-            flags.append('STORED_OBSERVATION_REQUIRED')
-        # Cache only successful, general educational outputs. Never reuse an
-        # observation-specific answer after the underlying record changes.
-        cacheable = not history and not needs_observation and not request.sample_id and not request.mission_id and intent in {
-            'lichen_education', 'environmental_education', 'growth_form',
-            'limitations', 'air_quality_data',
-        }
+        mode = 'deterministic_fallback'
+        model, status = None, 'ok'
+        intent = 'clarification_needed'
+        cacheable = not history and not request.sample_id and not request.mission_id
         cache_key = hashlib.sha256(canonical_json({
-            'answer_quality_version': 'semantic_interpretation_v3',
-            'question': ' '.join(request.question.lower().split()),
-            'intent': intent,
-            'model': self.settings.chat_model,
-            'source_ids': [r['source_id'] for r in retrieved[:6]],
+            'version': 'combined_v1', 'question': request.question.strip(),
+            'model': self.settings.chat_model, 'sources': retrieved,
         }).encode()).hexdigest()
         cache_hit = None
-        if cacheable:
+        if cacheable and self.client is not None:
             with self._cache_lock:
                 entry = self._answer_cache.get(cache_key)
                 if entry and entry[0] > time.monotonic():
@@ -3865,68 +3843,84 @@ class AskLichenLens:
                     self._answer_cache.move_to_end(cache_key)
                 elif entry:
                     self._answer_cache.pop(cache_key, None)
-        mode: Literal['grounded_llm', 'deterministic_fallback'] = 'deterministic_fallback'
-        model = None
 
-        if cache_hit is not None:
-            plan = clean_citation_markup(LLMTextPlan.model_validate(cache_hit['plan']), retrieved)
-            mode, model = 'grounded_llm', cache_hit['model']
-            print('CHAT_CACHE_HIT', flush=True)
-        elif intent == 'security_redirect':
+        def retry_plan():
+            return LLMTextPlan(
+                answer='Ask LichenLens could not generate a response right now. Please try again shortly.',
+                uncertainty='This is a temporary service problem. Your question has not been classified as unsupported.',
+                recommended_action='none', cited_source_ids=[])
+
+        if is_security_request(request.question):
+            intent = 'security_redirect'
             flags.append('PROMPT_INJECTION_BLOCKED')
             plan = deterministic_plan(intent, evidence, retrieved, flags)
-        elif interpretation_failed or intent in {'out_of_scope', 'clarification_needed'} or (needs_observation and not evidence):
-            if self.client is None:
-                flags.append('GEMINI_API_UNAVAILABLE')
-            if interpretation_failed:
-                plan = LLMTextPlan(
-                    answer='I could not interpret this request reliably right now. Please try again with the topic included.',
-                    uncertainty='AI interpretation was unavailable; this does not mean your question is outside the supported topics.',
-                    recommended_action='none', cited_source_ids=[])
-            elif needs_observation and not evidence:
-                plan = LLMTextPlan(
-                    answer='Please select the relevant real sample or mission record so I can explain it without inventing observations.',
-                    uncertainty='Past conversation text cannot substitute for stored EcoSignal evidence.',
-                    recommended_action='review_scan', cited_source_ids=[])
-            else:
-                plan = deterministic_plan(intent, evidence, retrieved, flags)
+        elif self.client is None:
+            flags.extend(['GEMINI_API_UNAVAILABLE', 'LLM_GENERATION_UNAVAILABLE'])
+            status, plan = 'retryable_error', retry_plan()
         else:
             try:
-                candidate, chosen_model = generate_plan(self.client, request.question, intent, evidence, retrieved, self.settings,
-                                                        recent_user_questions=recent_user_questions, conversation_history=history)
-                candidate = clean_citation_markup(candidate, retrieved)
-                validation_flags = validate_plan(candidate, retrieved, evidence)
-                if validation_flags:
-                    flags.extend(validation_flags)
-                    print(f'GROUNDING_REJECTED flags={validation_flags}', flush=True)
-                    plan = deterministic_plan(intent, evidence, retrieved, context_flags)
+                if cache_hit is not None:
+                    candidate = CombinedPlan.model_validate(cache_hit['candidate'])
+                    chosen_model = cache_hit['model']
+                    print('CHAT_CACHE_HIT', flush=True)
                 else:
-                    plan, mode, model = normalize_plan_citations(candidate, retrieved), 'grounded_llm', chosen_model
-                    if cacheable:
-                        ttl = max(60, min(86400, int(os.getenv('ECOSIGNAL_CACHE_TTL_SECONDS', '3600'))))
-                        with self._cache_lock:
-                            self._answer_cache[cache_key] = (time.monotonic() + ttl, {
-                                'plan': plan.model_dump(), 'model': model,
-                            })
-                            self._answer_cache.move_to_end(cache_key)
-                            while len(self._answer_cache) > 256:
-                                self._answer_cache.popitem(last=False)
+                    candidate, chosen_model = generate_combined_plan(self.client, request, evidence, retrieved, self.settings)
+                interpretation = candidate.interpretation
+                intent = interpretation.intent
+                candidate_plan = LLMTextPlan.model_validate(candidate.model_dump())
+                if intent == 'security_redirect':
+                    flags.append('PROMPT_INJECTION_BLOCKED')
+                    plan = deterministic_plan(intent, evidence, retrieved, flags)
+                elif intent in {'out_of_scope', 'clarification_needed'}:
+                    plan = deterministic_plan(intent, evidence, retrieved, flags)
+                elif interpretation.requires_stored_observation and not evidence:
+                    flags.append('STORED_OBSERVATION_REQUIRED')
+                    plan = LLMTextPlan(
+                        answer='Please select the relevant real sample or mission record so I can explain it without inventing observations.',
+                        uncertainty='Past conversation text cannot substitute for stored EcoSignal evidence.',
+                        recommended_action='review_scan', cited_source_ids=[])
+                else:
+                    candidate_plan = clean_citation_markup(candidate_plan, retrieved)
+                    validation_flags = validate_plan(candidate_plan, retrieved, evidence)
+                    if validation_flags:
+                        flags.extend(validation_flags)
+                        status, plan = 'retryable_error', retry_plan()
+                    else:
+                        plan = normalize_plan_citations(candidate_plan, retrieved)
+                        mode, model = 'grounded_llm', chosen_model
+                        if cacheable and not interpretation.requires_stored_observation and intent in {
+                            'lichen_education', 'environmental_education', 'growth_form', 'limitations', 'air_quality_data',
+                        }:
+                            ttl = max(60, min(86400, int(os.getenv('ECOSIGNAL_CACHE_TTL_SECONDS', '3600'))))
+                            with self._cache_lock:
+                                self._answer_cache[cache_key] = (time.monotonic()+ttl, {
+                                    'candidate': candidate.model_dump(), 'model': model})
+                                self._answer_cache.move_to_end(cache_key)
+                                while len(self._answer_cache) > 256:
+                                    self._answer_cache.popitem(last=False)
             except Exception as exc:
-                print(f'CHAT_GENERATION_FALLBACK type={type(exc).__name__}', flush=True)
+                print(f'CHAT_GENERATION_UNAVAILABLE type={type(exc).__name__}', flush=True)
                 flags.append('LLM_GENERATION_UNAVAILABLE')
-                plan = deterministic_plan(intent, evidence, retrieved, context_flags)
+                status, plan = 'retryable_error', retry_plan()
 
         by_id = {r['source_id']: r for r in retrieved}
         sources = [Citation(**{k: by_id[sid].get(k) for k in ('source_id', 'title', 'url', 'supports', 'evidence_type', 'geographic_scope')})
                    for sid in plan.cited_source_ids if sid in by_id]
         reply = AssistantReply(
-            request_id=request_id, intent=intent, answer=plan.answer, scan_evidence=evidence,
+            request_id=request_id, status=status, intent=intent, answer=plan.answer, scan_evidence=evidence,
             uncertainty=plan.uncertainty, recommended_action=plan.recommended_action,
             sources=sources, safety_flags=sorted(set(flags)), mode=mode, model=model,
-            sample_id=request.sample_id, generated_at=utc_now())
+            sample_id=request.sample_id, generated_at=utc_now(),
+            response_time_ms=round((time.monotonic()-started)*1000, 3))
         if audit:
-            append_audit(request, reply, [r['source_id'] for r in retrieved], self.settings.chatbot_db)
+            try:
+                append_audit(request, reply, [r['source_id'] for r in retrieved], self.settings.chatbot_db)
+            except (sqlite3.Error, OSError) as exc:
+                # Audit storage failures must not discard a completed answer.
+                print(f'CHAT_AUDIT_UNAVAILABLE type={type(exc).__name__}', flush=True)
+        print(f'CHAT_TIMING request_id={request_id} status={status} duration_ms={(time.monotonic()-started)*1000:.3f}', flush=True)
         return reply
+
 
 assistant = AskLichenLens()
 print({'assistant_ready': True, 'generation_mode': 'Gemini client configured (live connection not yet verified)' if assistant.client else 'deterministic fallback',
@@ -3934,7 +3928,7 @@ print({'assistant_ready': True, 'generation_mode': 'Gemini client configured (li
 
 
 from collections import defaultdict, deque
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from threading import Lock
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -3968,7 +3962,8 @@ def assistant_health():
         'generation_available': assistant.client is not None,
         'chat_model': SETTINGS.chat_model if assistant.client else None,
         'retrieval': assistant.embedding_status,
-        'interpretation': 'context_aware_gemini',
+        'interpretation': 'single_call_context_and_answer',
+        'provider_limits': provider_limits(),
         'production_db_found': SETTINGS.production_db.exists(),
         'scientific_mode': 'screening_not_diagnosis',
     }
@@ -3987,7 +3982,7 @@ def suggested_questions(sample_id: Optional[str] = None):
     return {'questions': base}
 
 @api.post('/assistant/ask', response_model=AssistantReply)
-def ask_endpoint(request: AskRequest, http_request: Request):
+def ask_endpoint(request: AskRequest, http_request: Request, response: Response):
     enforce_rate_limit(http_request.client.host if http_request.client else "unknown")
     started = time.monotonic()
     reply = assistant.ask(request)
@@ -3996,6 +3991,11 @@ def ask_endpoint(request: AskRequest, http_request: Request):
         f'model={reply.model or "none"} duration_s={time.monotonic()-started:.2f}',
         flush=True,
     )
+    response.headers['Server-Timing'] = f'assistant;dur={(time.monotonic()-started)*1000:.3f}'
+    response.headers['Cache-Control'] = 'no-store'
+    if reply.status == 'retryable_error':
+        response.status_code = 503
+        response.headers['Retry-After'] = '5'
     return reply
 
 @api.get('/assistant/audit/verify')
