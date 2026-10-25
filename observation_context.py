@@ -4,7 +4,6 @@ import io
 import warnings
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from PIL import Image, ImageOps
 
 MAX_IMAGE_BYTES = 700_000
 
@@ -14,7 +13,7 @@ class StrictModel(BaseModel):
 
 
 class Selection(StrictModel):
-    image: bool = False
+    image: Literal[False] = False
     coverage: bool = False
     growth_form: bool = False
     satellite: bool = False
@@ -26,42 +25,6 @@ class Selection(StrictModel):
 class Point(StrictModel):
     lat: float = Field(ge=-90, le=90)
     lon: float = Field(ge=-180, le=180)
-
-
-class ImageInput(StrictModel):
-    mime_type: Literal['image/jpeg', 'image/png', 'image/webp']
-    data: str = Field(min_length=4, max_length=940_000, repr=False)
-
-    @model_validator(mode='after')
-    def validate_and_strip_metadata(self):
-        try:
-            raw = base64.b64decode(self.data, validate=True)
-            if not 0 < len(raw) <= MAX_IMAGE_BYTES:
-                raise ValueError()
-            with warnings.catch_warnings():
-                warnings.simplefilter('error', Image.DecompressionBombWarning)
-                with Image.open(io.BytesIO(raw)) as image:
-                    if image.format not in {'JPEG', 'PNG', 'WEBP'} or image.width * image.height > 16_000_000:
-                        raise ValueError()
-                    expected = {'JPEG': 'image/jpeg', 'PNG': 'image/png', 'WEBP': 'image/webp'}[image.format]
-                    if expected != self.mime_type:
-                        raise ValueError()
-                    image.load()
-                    clean = ImageOps.exif_transpose(image).convert('RGB')
-                    clean.thumbnail((1280, 1280))
-                    for quality in (80, 65, 50):
-                        output = io.BytesIO()
-                        clean.save(output, format='JPEG', quality=quality)
-                        if output.tell() <= MAX_IMAGE_BYTES:
-                            break
-                    if output.tell() > MAX_IMAGE_BYTES:
-                        raise ValueError()
-                    self.data = base64.b64encode(output.getvalue()).decode('ascii')
-                    self.mime_type = 'image/jpeg'
-        except Exception:
-            # No raw bytes or underlying decoder exception in validation messages.
-            raise ValueError('Choose a valid JPEG, PNG or WebP image under 700 KB after resizing.') from None
-        return self
 
 
 class Provenance(StrictModel):
@@ -114,7 +77,7 @@ class Elevation(Provenance):
 class ObservationContext(StrictModel):
     observation_id: str = Field(min_length=1, max_length=128)
     selection: Selection
-    image: ImageInput | None = None
+    image: None = None
     coverage: Coverage | None = None
     growth_form: GrowthForm | None = None
     satellite: Satellite | None = None
@@ -147,20 +110,14 @@ class ObservationContext(StrictModel):
     def text_payload(self):
         result = self.model_dump(exclude={'image'}, exclude_none=True)
         result['provenance_status'] = 'User-selected submitted observation; not independently verified'
-        if self.image:
-            result['image_attached'] = True
         return result
 
     def provider_image_part(self):
-        if not self.image:
-            return None
-        return {'inline_data': {'mime_type': self.image.mime_type, 'data': base64.b64decode(self.image.data)}}
+        return None  # Compatibility for callers; images are rejected by validation.
 
     def evidence_rows(self):
         source = f'User-selected observation {self.observation_id}; submitted, not independently verified'
         rows = []
-        if self.image:
-            rows.append({'label': 'Attached photograph', 'value': 'Supplied for visual description; not a measured prediction', 'source': source})
         labels = {'coverage': 'Visible coverage', 'growth_form': 'Growth form', 'satellite': 'Satellite indices',
                   'geomorphology': 'Geomorphology susceptibility', 'elevation': 'Elevation', 'location': 'Selected coordinates'}
         import json

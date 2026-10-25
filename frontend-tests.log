@@ -1,0 +1,15 @@
+✔ all 63 data selection combinations retain exact receipts and reject deselected fields (3.81828ms)
+✔ images rejected before provider call on both connection paths (7.951066ms)
+✔ available fields and select-all cannot include photographs (0.548864ms)
+✔ direct Gemini preserves selected data and conversation with no image parts (8.551897ms)
+✔ Render proxy preserves exact data receipt and both conversation roles (1.859406ms)
+✔ question-only and follow-up chat remain available (0.814517ms)
+✔ unchecked values and invalid numbers are rejected (0.285863ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 622.901654

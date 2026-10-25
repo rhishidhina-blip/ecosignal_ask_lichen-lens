@@ -27,7 +27,7 @@ services:
       - key: ECOSIGNAL_GEMINI_MAX_ATTEMPTS
         value: "2"
       - key: ECOSIGNAL_GEMINI_BACKOFF_SECONDS
-        value: "1.0"
+        value: "8"
       - key: ECOSIGNAL_GEMINI_QUEUE_TIMEOUT_SECONDS
         value: "3"
       - key: ECOSIGNAL_GEMINI_BUDGET_SECONDS

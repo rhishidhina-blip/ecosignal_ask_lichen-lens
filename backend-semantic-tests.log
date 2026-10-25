@@ -1,0 +1,41 @@
+/root/.local/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+{'production_db_found': False, 'features_17_19_db_found': False, 'mission_json_found': False, 'repeat_manifest_found': False, 'gemini_mode_available': False, 'chat_model': 'gemini-3.1-flash-lite'}
+Loaded 192 reviewed knowledge chunks.
+{'assistant_ready': True, 'generation_mode': 'deterministic fallback', 'retrieval': 'disabled_or_unavailable'}
+CHAT_TIMING request_id=25e146ee-490d-487e-bf9a-99f32ab2907a status=retryable_error duration_ms=5.090
+CHAT_RESULT request_id=25e146ee-490d-487e-bf9a-99f32ab2907a mode=deterministic_fallback model=none duration_s=0.01
+GEMINI_OK attempt=1 model=gemini-3.1-flash-lite duration_s=0.001
+CHAT_TIMING request_id=9a1d9676-d618-43bf-a76b-7cf3a64e324e status=ok duration_ms=5.595
+CHAT_RESULT request_id=9a1d9676-d618-43bf-a76b-7cf3a64e324e mode=grounded_llm model=gemini-3.1-flash-lite duration_s=0.01
+test_503_retry_then_success (__main__.run_semantic_tests.<locals>.SemanticTests.test_503_retry_then_success) ... ok
+test_arbitrary_wording_has_no_topic_gate (__main__.run_semantic_tests.<locals>.SemanticTests.test_arbitrary_wording_has_no_topic_gate) ... ok
+test_audit_failure_preserves_answer (__main__.run_semantic_tests.<locals>.SemanticTests.test_audit_failure_preserves_answer) ... ok
+test_auth_error_and_quota_not_repeated (__main__.run_semantic_tests.<locals>.SemanticTests.test_auth_error_and_quota_not_repeated) ... ok
+test_cache_avoids_both_provider_stages (__main__.run_semantic_tests.<locals>.SemanticTests.test_cache_avoids_both_provider_stages) ... ok
+test_failure_is_explicit_retry_not_scope (__main__.run_semantic_tests.<locals>.SemanticTests.test_failure_is_explicit_retry_not_scope) ... ok
+test_followup_retains_both_roles_and_sources (__main__.run_semantic_tests.<locals>.SemanticTests.test_followup_retains_both_roles_and_sources) ... ok
+test_history_limits (__main__.run_semantic_tests.<locals>.SemanticTests.test_history_limits) ... ok
+test_http_status_timing_and_audit (__main__.run_semantic_tests.<locals>.SemanticTests.test_http_status_timing_and_audit) ... ok
+test_invalid_schema_is_not_retried (__main__.run_semantic_tests.<locals>.SemanticTests.test_invalid_schema_is_not_retried) ... ok
+test_missing_citation_rejected (__main__.run_semantic_tests.<locals>.SemanticTests.test_missing_citation_rejected) ... ok
+test_missing_key_is_service_failure (__main__.run_semantic_tests.<locals>.SemanticTests.test_missing_key_is_service_failure) ... ok
+test_missing_observation_never_uses_chat_as_evidence (__main__.run_semantic_tests.<locals>.SemanticTests.test_missing_observation_never_uses_chat_as_evidence) ... ok
+test_no_retry_beyond_deadline (__main__.run_semantic_tests.<locals>.SemanticTests.test_no_retry_beyond_deadline) ... ok
+test_out_of_scope_requires_model_classification (__main__.run_semantic_tests.<locals>.SemanticTests.test_out_of_scope_requires_model_classification) ... ok
+test_prompt_secret_guard_precedes_provider (__main__.run_semantic_tests.<locals>.SemanticTests.test_prompt_secret_guard_precedes_provider) ... ok
+test_queue_saturation_does_not_call_provider (__main__.run_semantic_tests.<locals>.SemanticTests.test_queue_saturation_does_not_call_provider) ... ok
+test_real_ambiguity_is_not_failure (__main__.run_semantic_tests.<locals>.SemanticTests.test_real_ambiguity_is_not_failure) ... ok
+test_repeated_504_is_bounded (__main__.run_semantic_tests.<locals>.SemanticTests.test_repeated_504_is_bounded) ... ok
+test_scientific_guard_retained (__main__.run_semantic_tests.<locals>.SemanticTests.test_scientific_guard_retained) ... ok
+test_sdk_accepts_per_request_timeout_options (__main__.run_semantic_tests.<locals>.SemanticTests.test_sdk_accepts_per_request_timeout_options) ... ok
+test_semantic_security_guard_discards_generated_answer (__main__.run_semantic_tests.<locals>.SemanticTests.test_semantic_security_guard_discards_generated_answer) ... ok
+test_single_combined_call (__main__.run_semantic_tests.<locals>.SemanticTests.test_single_combined_call) ... ok
+test_unapproved_citation_rejected (__main__.run_semantic_tests.<locals>.SemanticTests.test_unapproved_citation_rejected) ... ok
+test_unapproved_inline_citation_rejected (__main__.run_semantic_tests.<locals>.SemanticTests.test_unapproved_inline_citation_rejected) ... ok
+
+----------------------------------------------------------------------
+Ran 25 tests in 2.698s
+
+OK
+

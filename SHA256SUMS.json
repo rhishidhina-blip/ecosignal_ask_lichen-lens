@@ -1,0 +1,20 @@
+{
+  "VALIDATION.md": "b3fef039064a1edbcf651a47f556b91e215f005196a61a198af8b3b99cace205",
+  "frontend-tests.log": "ce229b5dcae8a7809858e9b6c5c04aac1a3bcf46decda80f1ab6aa38e244118c",
+  "backend-data-tests.log": "b270a5022f692f73ad6607407fb61f05b7387ac3411b25b5158b717e8b4a0d28",
+  "backend-semantic-tests.log": "8590e83b94036b61d294c8c6f6308bc356fd044ffec7268948cd113fd8788bfb",
+  "HANDOFF_TO_SITES_CHAT.md": "7d1cd7c4ccce5bb2c1e6bad07465418f9aad244997529577f2b22bf0c02b73c4",
+  "00_START_HERE.md": "a96088b0f60b8f549f8c52d2b56355aeb3bf89c821fb71839f8a24db07853396",
+  "Render_Backend/render.yaml": "35c04d83ce9e25d67385a4f097cc097d1d75320ff55c872a147d36a1e13b8b70",
+  "Render_Backend/main.py": "0805830c1cfee98203048e5d09b3c09cd4491f966d3c0864d131c600f70f14c2",
+  "Render_Backend/requirements.txt": "2ffffd3eedd89b485fbeca2b87ec4b69186a83d4c3ea38f0ed9822b9109322d1",
+  "Render_Backend/observation_context.py": "7866a6d77c9820a2b31c043cbaee06df64dc6579c1e0f1b165c8dd633e113401",
+  "Render_Backend/semantic_checks.py": "21ff6219bdcdb45e188f0a821605b66bf09096dd36e4aec55f5625a485a5e8a3",
+  "Sites_Patch/tests/multimodal-chat.test.mjs": "5a844c2efea5cbbb7aa7ce03a84770a02acf273a0c3924fb9f1b01f4082939ce",
+  "Sites_Patch/app/observation-attachments.tsx": "c9f21800a296baa05e45ba996b1b9908a7810b40e84ffd4969c7a6e462c3fb2d",
+  "Sites_Patch/app/assistant-panel.tsx": "cbea2004744eaa84f6e62bc23b92cfa7baea0840f0f8aadd21dca6cd74853988",
+  "Sites_Patch/app/lib/gemini.ts": "8d7ccac13805578faedbf98a1e1dbc89ce09d8781d2e6c8a75860df5bdc9db05",
+  "Sites_Patch/app/lib/observation-context.ts": "5a05fc54b758719119e7ca1800749c290c7dfe485b0dc561738815dbfe7bcf9c",
+  "Sites_Patch/app/lib/assistant.ts": "537b7aa24ca2a3e6fe7a42146d072dca35978f9cb0945b22f343170e6d966239",
+  "Render_Backend/tests/test_multimodal.py": "c91042cc58364808c4e1bbb42a9d899ab7b83c957f44cdbdfb76333e368355ef"
+}

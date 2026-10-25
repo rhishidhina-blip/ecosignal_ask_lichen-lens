@@ -1,0 +1,18 @@
+/root/.local/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+.{'production_db_found': False, 'features_17_19_db_found': False, 'mission_json_found': False, 'repeat_manifest_found': False, 'gemini_mode_available': False, 'chat_model': 'gemini-3.1-flash-lite'}
+Loaded 192 reviewed knowledge chunks.
+{'assistant_ready': True, 'generation_mode': 'deterministic fallback', 'retrieval': 'disabled_or_unavailable'}
+GEMINI_OK attempt=1 model=gemini-3.1-flash-lite duration_s=0.002
+CHAT_TIMING request_id=f0770560-a786-4d8f-b53a-0e9f7c306dcc status=ok duration_ms=7.898
+CHAT_RESULT request_id=f0770560-a786-4d8f-b53a-0e9f7c306dcc mode=grounded_llm model=gemini-3.1-flash-lite duration_s=0.01
+.GEMINI_OK attempt=1 model=gemini-3.1-flash-lite duration_s=0.001
+CHAT_TIMING request_id=6f2f62e4-7895-428b-9b54-4cf0c1a0f6b7 status=ok duration_ms=1.853
+..GEMINI_ERROR attempt=1 status=503 type=ProviderError duration_s=0.001
+GEMINI_OK attempt=2 model=gemini-3.1-flash-lite duration_s=0.001
+CHAT_TIMING request_id=0566b26c-50fc-4e92-9839-15ed6dffd2cb status=ok duration_ms=2.364
+.
+----------------------------------------------------------------------
+Ran 5 tests in 0.112s
+
+OK
