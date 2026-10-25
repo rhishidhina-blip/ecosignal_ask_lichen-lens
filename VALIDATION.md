@@ -1,28 +1,18 @@
-# Local validation — October 12, 2026
+# Validation of completed multimodal continuation
 
-Passed: 15 semantic pipeline checks and 7 diagnostic checks (22 total), executed
-through `python -m unittest discover -s tests -v` (one wrapper runs the 15 checks).
-Provider responses were explicit test fixtures; no billable calls were made.
+{
+  "context_version": "observation-context-v1",
+  "site_baseline_version": 27,
+  "site_tests": 149,
+  "python_distinct_checks": 39,
+  "python_top_level_tests": 15,
+  "nested_semantic_checks": 25,
+  "selection_combinations_per_engine": 127,
+  "direct_path": "injected provider and actual JPEG decode/encode verified; live not run: Site key absent",
+  "render_path": "new code injected SDK request + API verified; old deployed text HTTP200 with4citations in6.8s; new backend not yet deployed",
+  "scientific_validation": "not_run",
+  "browser": "cloud preview desktop empty collection, question display and safe retry checked; exact mobile and real saved attachment interaction not run",
+  "secrets_or_observed_data_bundled": false
+}
 
-Checks cover unfamiliar wording reaching the model, both conversation roles,
-resolved retrieval, ambiguity, unrelated topics, unavailable/invalid interpretation,
-stored-record requirements, prompt/secret protection, scientific assertions,
-citations, cache isolation and reuse, HTTP contracts, audit-chain integrity,
-diagnostic privacy, timeout/retry options and tracing both generation stages.
-
-The notebook code cells were executed in order locally, excluding the Colab
-installation command. Optional live generation, export and server remained off.
-Outputs, execution counts and stale widget state are cleared. The backend core
-matches main.py; its embedded ZIP is checked for integrity and matching SHA-256.
-
-Tested on Windows Python 3.12.14 with NumPy 2.2.6, pandas 2.2.3, SciPy 1.15.3,
-scikit-learn 1.6.1, Google GenAI 2.29.0, Pydantic 2.14.1 and FastAPI 0.143.0.
-requirements.txt retains the earlier scientific pins. The exact Render Linux
-Python 3.11.11 environment and Colab Drive were not executed here.
-
-The keyword topic router and phrase-based context matcher are removed. Retrieval
-ranking and targeted safety checks do not decide whether wording is accepted.
-There is no public diagnostic endpoint. Live interpretation quality, provider
-quota and latency remain to be checked with the existing private key. Optional
-live examples are included and off by default. No keys or raw provider exceptions
-are saved in outputs.
+Synthetic fixtures verify software only. See tests/test_multimodal.py and semantic_checks.py. SDK constructor test isolates external proxy environment; no network is used by that test.

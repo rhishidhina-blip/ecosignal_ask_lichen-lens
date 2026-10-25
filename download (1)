@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example
+EcoSignal_runtime/
+.venv/
+
+node_modules/
+live-response-times.json
+website-response-times.json

@@ -4,9 +4,8 @@ services:
     runtime: python
     buildCommand: python -m pip install --only-binary=:all: -r requirements.txt
     startCommand: uvicorn main:api --host 0.0.0.0 --port $PORT
+    healthCheckPath: /assistant/health
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.11
       - key: GEMINI_API_KEY
         sync: false
       - key: ECOSIGNAL_CHAT_MODEL

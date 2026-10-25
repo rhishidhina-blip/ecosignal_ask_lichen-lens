@@ -1,0 +1,61 @@
+/tmp/ecosignal-multimodal/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+test_cli_failure_is_sanitized_and_does_not_block_startup (test_diagnostic.DiagnosticTests.test_cli_failure_is_sanitized_and_does_not_block_startup) ... ok
+test_disabled_and_missing_key_never_create_client (test_diagnostic.DiagnosticTests.test_disabled_and_missing_key_never_create_client) ... ok
+test_empty_response (test_diagnostic.DiagnosticTests.test_empty_response) ... ok
+test_error_classification_and_redaction (test_diagnostic.DiagnosticTests.test_error_classification_and_redaction) ... ok
+test_full_diagnostic_reports_single_combined_attempt (test_diagnostic.DiagnosticTests.test_full_diagnostic_reports_single_combined_attempt) ... ok
+test_minimal_single_fixed_call_private_output_and_close (test_diagnostic.DiagnosticTests.test_minimal_single_fixed_call_private_output_and_close) ... ok
+test_sdk_options_validate_without_network (test_diagnostic.DiagnosticTests.test_sdk_options_validate_without_network) ... ok
+test_all_selection_combinations_have_exact_receipt (test_multimodal.MultimodalTests.test_all_selection_combinations_have_exact_receipt) ... ok
+test_api_receipt_and_safe_validation_error (test_multimodal.MultimodalTests.test_api_receipt_and_safe_validation_error) ... ok
+test_each_category_and_combined_selection_reach_one_provider_call (test_multimodal.MultimodalTests.test_each_category_and_combined_selection_reach_one_provider_call) ... ok
+test_invalid_hidden_missing_unselected_numeric_and_blank_inputs_rejected (test_multimodal.MultimodalTests.test_invalid_hidden_missing_unselected_numeric_and_blank_inputs_rejected) ... ok
+test_invalid_image_mime_size_and_dimensions (test_multimodal.MultimodalTests.test_invalid_image_mime_size_and_dimensions) ... ok
+test_jpeg_orientation_progressive_metadata_trailing_and_valid_decode (test_multimodal.MultimodalTests.test_jpeg_orientation_progressive_metadata_trailing_and_valid_decode) ... ok
+test_streamed_body_limit_and_text_only_compatibility (test_multimodal.MultimodalTests.test_streamed_body_limit_and_text_only_compatibility) ... ok
+test_semantic_pipeline (test_semantic.SemanticSuite.test_semantic_pipeline) ... {'production_db_found': False, 'features_17_19_db_found': False, 'mission_json_found': False, 'repeat_manifest_found': False, 'gemini_mode_available': False, 'chat_model': 'gemini-3.1-flash-lite'}
+Loaded 192 reviewed knowledge chunks.
+{'assistant_ready': True, 'generation_mode': 'deterministic fallback', 'retrieval': 'disabled_or_unavailable'}
+CHAT_TIMING request_id=db123a3a-1ef5-4acb-8d77-ff6cc1371b7e status=retryable_error duration_ms=5.049
+CHAT_RESULT request_id=db123a3a-1ef5-4acb-8d77-ff6cc1371b7e mode=deterministic_fallback model=none duration_s=0.01
+GEMINI_OK attempt=1 model=gemini-3.1-flash-lite duration_s=0.001
+CHAT_TIMING request_id=69477ccd-bbbf-4ca8-bb79-482ef280e02f status=ok duration_ms=4.151
+CHAT_RESULT request_id=69477ccd-bbbf-4ca8-bb79-482ef280e02f mode=grounded_llm model=gemini-3.1-flash-lite duration_s=0.00
+ok
+
+----------------------------------------------------------------------
+Ran 15 tests in 3.638s
+
+OK
+test_503_retry_then_success (semantic_checks.run_semantic_tests.<locals>.SemanticTests.test_503_retry_then_success) ... ok
+test_arbitrary_wording_has_no_topic_gate (semantic_checks.run_semantic_tests.<locals>.SemanticTests.test_arbitrary_wording_has_no_topic_gate) ... ok
+test_audit_failure_preserves_answer (semantic_checks.run_semantic_tests.<locals>.SemanticTests.test_audit_failure_preserves_answer) ... ok
+test_auth_error_and_quota_not_repeated (semantic_checks.run_semantic_tests.<locals>.SemanticTests.test_auth_error_and_quota_not_repeated) ... ok
+test_cache_avoids_both_provider_stages (semantic_checks.run_semantic_tests.<locals>.SemanticTests.test_cache_avoids_both_provider_stages) ... ok
+test_failure_is_explicit_retry_not_scope (semantic_checks.run_semantic_tests.<locals>.SemanticTests.test_failure_is_explicit_retry_not_scope) ... ok
+test_followup_retains_both_roles_and_sources (semantic_checks.run_semantic_tests.<locals>.SemanticTests.test_followup_retains_both_roles_and_sources) ... ok
+test_history_limits (semantic_checks.run_semantic_tests.<locals>.SemanticTests.test_history_limits) ... ok
+test_http_status_timing_and_audit (semantic_checks.run_semantic_tests.<locals>.SemanticTests.test_http_status_timing_and_audit) ... ok
+test_invalid_schema_is_not_retried (semantic_checks.run_semantic_tests.<locals>.SemanticTests.test_invalid_schema_is_not_retried) ... ok
+test_missing_citation_rejected (semantic_checks.run_semantic_tests.<locals>.SemanticTests.test_missing_citation_rejected) ... ok
+test_missing_key_is_service_failure (semantic_checks.run_semantic_tests.<locals>.SemanticTests.test_missing_key_is_service_failure) ... ok
+test_missing_observation_never_uses_chat_as_evidence (semantic_checks.run_semantic_tests.<locals>.SemanticTests.test_missing_observation_never_uses_chat_as_evidence) ... ok
+test_no_retry_beyond_deadline (semantic_checks.run_semantic_tests.<locals>.SemanticTests.test_no_retry_beyond_deadline) ... ok
+test_out_of_scope_requires_model_classification (semantic_checks.run_semantic_tests.<locals>.SemanticTests.test_out_of_scope_requires_model_classification) ... ok
+test_prompt_secret_guard_precedes_provider (semantic_checks.run_semantic_tests.<locals>.SemanticTests.test_prompt_secret_guard_precedes_provider) ... ok
+test_queue_saturation_does_not_call_provider (semantic_checks.run_semantic_tests.<locals>.SemanticTests.test_queue_saturation_does_not_call_provider) ... ok
+test_real_ambiguity_is_not_failure (semantic_checks.run_semantic_tests.<locals>.SemanticTests.test_real_ambiguity_is_not_failure) ... ok
+test_repeated_504_is_bounded (semantic_checks.run_semantic_tests.<locals>.SemanticTests.test_repeated_504_is_bounded) ... ok
+test_scientific_guard_retained (semantic_checks.run_semantic_tests.<locals>.SemanticTests.test_scientific_guard_retained) ... ok
+test_sdk_accepts_per_request_timeout_options (semantic_checks.run_semantic_tests.<locals>.SemanticTests.test_sdk_accepts_per_request_timeout_options) ... ok
+test_semantic_security_guard_discards_generated_answer (semantic_checks.run_semantic_tests.<locals>.SemanticTests.test_semantic_security_guard_discards_generated_answer) ... ok
+test_single_combined_call (semantic_checks.run_semantic_tests.<locals>.SemanticTests.test_single_combined_call) ... ok
+test_unapproved_citation_rejected (semantic_checks.run_semantic_tests.<locals>.SemanticTests.test_unapproved_citation_rejected) ... ok
+test_unapproved_inline_citation_rejected (semantic_checks.run_semantic_tests.<locals>.SemanticTests.test_unapproved_inline_citation_rejected) ... ok
+
+----------------------------------------------------------------------
+Ran 25 tests in 3.371s
+
+OK
+

@@ -26,7 +26,8 @@ class FakeGemini:
         if self.errors:
             error=self.errors.pop(0)
             if error: raise error
-        payload=json.loads(kwargs['contents'])
+        contents=kwargs['contents']
+        payload=json.loads(contents if isinstance(contents,str) else contents[0]['parts'][0]['text'])
         ids=[s['source_id'] for s in payload['approved_sources'][:1]]
         value={'interpretation':{'intent':self.intent,'standalone_question':payload['question'],
             'requires_stored_observation':self.needs,'is_followup':bool(payload['conversation_history'])},

@@ -1,14 +1,13 @@
 # One-time Render Gemini diagnostic
 
-This package preserves the Answer Quality improvements and adds semantic
-follow-up interpretation; requirements are unchanged. The diagnostic is a standalone command, disabled by default,
+This package uses combined interpretation and answering in one generation; requirements are unchanged. The diagnostic is a standalone command, disabled by default,
 with no HTTP route. It uses only the existing Render `GEMINI_API_KEY`; it never
 prints the key, provider text, request headers, raw exception or response body.
 
 ## Deploy and run once
 
-1. Extract the ZIP and upload its contents to the existing GitHub repository
-   root, replacing matching files. Commit. Do not upload the ZIP itself.
+1. Apply the backend and website files separately as described in
+   UPLOAD_INSTRUCTIONS.md. Commit the backend files. Do not upload the ZIP itself.
 2. In Render > Environment, retain the existing `GEMINI_API_KEY`. Set
    `ECOSIGNAL_CHAT_MODEL=gemini-3.1-flash-lite` and temporarily set
    `ECOSIGNAL_ENABLE_GEMINI_DIAGNOSTICS=1`. No key belongs in GitHub or a command.
